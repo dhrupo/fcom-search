@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS offers (
 CREATE TABLE IF NOT EXISTS offer_posts (post_key TEXT PRIMARY KEY, offer_id TEXT NOT NULL);
 """
 INBOX = re.compile(r"\binbox\b|ইনবক্স|\bmessenger\b", re.IGNORECASE)
-PHONE_CATEGORIES = (None, "phones")  # compared lower-cased, as the crawler does
+PHONE_CATEGORIES = ("", "phones")  # compared trimmed and lower-cased; Marketplace has none
 
 
 class OffersError(RuntimeError):
@@ -76,7 +76,7 @@ def _read_rows(path: Path, cutoff: float) -> list[Row]:
     rows = []
     for sid, data in items:
         source, item = sources[sid], json.loads(data)
-        if (source.category and source.category.lower()) not in PHONE_CATEGORIES:
+        if (source.category or "").strip().lower() not in PHONE_CATEGORIES:
             continue
         thread = comments.get((sid, item["item_id"]), [])
         replies = [c.get("text") or "" for c in thread if c.get("is_owner")]

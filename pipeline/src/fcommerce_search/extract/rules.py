@@ -12,8 +12,11 @@ REGIONS = {
     "japan": "Japan", "jp": "Japan", "canada": "Canada", "uae": "UAE", "dubai": "UAE", "global": "Global",
     "india": "India", "indian": "India", "hong kong": "Hong Kong", "official": "Official",
 }
-NOT_A_PRICE = re.compile(
-    r"\b(bonus|discount|cashback|off|save|emi|delivery|charge|advance|booking|kom|less)\b|কম")
+# An amount is not the phone's price when these words sit just before it ("delivery charge 100tk",
+# "exchange hole 20000tk", "old price 95000") or just after it ("10,000 bonus", "2k kom").
+NOT_A_PRICE_BEFORE = re.compile(r"\b(bonus|discount|cashback|off|save|exchange|trade|emi|delivery|charge|advance|"
+                                r"booking|kom|less|add|old price|previous price|regular price)\b|কম")
+NOT_A_PRICE_AFTER = re.compile(r"\b(bonus|discount|cashback|off|kom|less|add)\b|কম")
 NUMBER = r"(\d[\d,]*(?:\.\d+)?)"
 PRICES = [
     (re.compile(rf"(?:bdt|tk|taka|৳|টাকা)\s*[:.]?\s*{NUMBER}"), 1),
@@ -24,11 +27,12 @@ PRICES = [
     (re.compile(rf"\b(?:price|দাম)\s*[:\-]?\s*{NUMBER}"), 1),
     (re.compile(r"(?<![\d,])(\d{1,2},\d{2},\d{3})(?![\d,])"), 1),
 ]
-NOT_AN_OFFER = re.compile(r"\b(exchange|trade|old|than|vs|compare|difference)\b|এক্সচেঞ্জ|পুরোনো|পুরাতন")
-# An accessory word right after "with", "and", "box"... lists what comes with a phone.
-ACCESSORY = re.compile(r"(?<!with )(?<!and )(?<!& )(?<!\+ )(?<!box )(?<!free )(?<!original )"
-                       r"\b(case|cover|tempered glass|protector|charger|adapter|cable|skin|airpods|earphones?)\b")
-CLAUSES = re.compile(r"(?<!\d)[.!?।](?!\d)(?!(?<=tk\.)\s*\d)|[;|\n]|,\s")
+TRADE_IN = re.compile(r"\b(your old|bring your|exchange your|trade in your|than|vs|compared?|difference)\b|পুরোনো|পুরাতন")
+NOT_AN_OFFER = re.compile(r"\b(exchange|trade|old)\b|এক্সচেঞ্জ")
+ACCESSORY = re.compile(r"\b(case|cover|glass|protector|charger|adapter|cable|skin|lens|airpods|earphones?)\b")
+INCLUDED = re.compile(r"\b(with|and|including|full box|free)\b|[&+]|সহ")
+# Split sentences, but not "Tk. 85,000" / "BDT. 85,000" (a currency word, a dot, then the amount).
+CLAUSES = re.compile(r"(?<!\d)(?<!(?<!\d)tk)(?<!(?<!\d)bdt)(?<!taka)[.!?।](?!\d)|[;|\n]|,\s")
 
 
 @dataclass(frozen=True)
@@ -51,9 +55,11 @@ def _phones() -> Catalog:
 
 def _prices(line: str) -> list[int]:
     found = []
-    clauses = [c for c in re.split(r"[;|]|,\s", line) if not NOT_A_PRICE.search(c)]
     for pattern, scale in PRICES:
-        for m in (m for clause in clauses for m in pattern.finditer(clause)):
+        for m in pattern.finditer(line):
+            before, after = " ".join(line[:m.start(1)].split()[-3:]), " ".join(line[m.end():].split()[:3])
+            if NOT_A_PRICE_BEFORE.search(before) or NOT_A_PRICE_AFTER.search(after):
+                continue
             raw = m.group(1)
             if scale == 1000 and float(raw) < 5:
                 continue
@@ -65,7 +71,7 @@ def _prices(line: str) -> list[int]:
 
 def _storages(line: str) -> list[tuple[int, int | None]]:
     found = []
-    for ram, storage in re.findall(r"\b(\d{1,2})\s*[/+]\s*(\d{2,4})\b", line):
+    for ram, storage in re.findall(r"\b(\d{1,2})(?:\s*/\s*|\+)(\d{2,4})\b", line):
         if int(storage) in STORAGE_GB and int(ram) <= 24:
             found.append((int(storage), int(ram)))
     for storage in re.findall(r"\b(\d{2,4})\s*(?:gb|জিবি)\b(?!\s*ram)", line):
@@ -106,7 +112,9 @@ def _box(text: str) -> str | None:
 
 def _is_accessory(text: str) -> bool:
     # "iPhone 15 Pro Max case 4,500tk" sells a case; "128GB with original charger" sells a phone.
-    return bool(ACCESSORY.search(text)) and not _storages(text)
+    if _storages(text):
+        return False
+    return any(not INCLUDED.search(" ".join(text[:m.start()].split()[-3:])) for m in ACCESSORY.finditer(text))
 
 
 def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = None) -> list[Offer]:
@@ -131,7 +139,7 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
     if len(table) >= 2:
         return table
 
-    clauses = [c for c in CLAUSES.split(post) if c.strip()]
+    clauses = [c for c in CLAUSES.split(post) if c.strip() and not TRADE_IN.search(c)]
     if _is_accessory(post):
         return []
     if len(catalog.find_models(post)) > 1:
@@ -164,7 +172,7 @@ def _one_offer_per_clause(catalog: Catalog, clauses: list[str], base: dict, regi
     for clause in clauses:
         models = catalog.find_models(clause)
         if len(models) > 1:
-            offers += [Offer(m.brand, m.model, region=region, **base) for m in models]
+            offers += [Offer(m.brand, m.model, region=_region(clause) or region, **base) for m in models]
             continue
         if not models:
             continue

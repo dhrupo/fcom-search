@@ -39,13 +39,15 @@ class Catalog:
         for bangla, english in self._words.items():
             text = text.replace(bangla, f" {english} ")
         # "16+512" is RAM+storage; the "+" in "S23+ 8/256" is the model's Plus.
-        text = re.sub(r"(?<!\w)(\d{1,2})\s*\+\s*(\d{2,4})\b", r"\1/\2", text)
+        text = re.sub(r"(?<!\w)(\d{1,2})\+(\d{2,4})\b", r"\1/\2", text)
         text = text.replace("+", " plus ").replace("promax", "pro max")
         if self._lines:
             text = re.sub(rf"\b({'|'.join(map(re.escape, self._lines))})(\d)", r"\1 \2", text)
-        # "13pm" / "13 pm" is iPhone shorthand, but "10am-11pm" and "till 12 pm" are shop hours.
+        # "13pm" / "iphone 13 pm" is shorthand for Pro Max; "10am-11pm", "at 11 pm", "by 12pm" are hours.
         if not re.search(r"\d\s*am\b", text):
-            text = re.sub(r"(?<!till )(?<!to )(?<!until )(?<!open )(?<!close )\b(1[1-9])\s?pm\b", r"\1 pro max", text)
+            text = re.sub(r"(?<=iphone )(1[1-9])\s?pm\b", r"\1 pro max", text)
+            text = re.sub(r"(?<!at )(?<!by )(?<!till )(?<!to )(?<!until )(?<!from )(?<!open )(?<!close )"
+                          r"(?<![-–])\b(1[1-9])pm\b", r"\1 pro max", text)
         text = re.sub(r"(\d)([a-z])", r"\1 \2", text)
         return re.findall(r"[a-z0-9]+", text)
 

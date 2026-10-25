@@ -290,9 +290,10 @@ class _Counting:
         self._db.close()
 
 
-def test_capitalised_phones_category_is_read(tmp_path):
+@pytest.mark.parametrize("category", ["Phones", " phones ", ""])
+def test_capitalised_phones_category_is_read(tmp_path, category):
     store, config = setup(tmp_path)
-    post(store, store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "Phones", name="Shop"), "p1",
+    post(store, store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", category, name="Shop"), "p1",
          "iPhone 13 Pro 128GB, 72k")
     assert [o["model"] for o in built(config)] == ["iPhone 13 Pro"]
 
