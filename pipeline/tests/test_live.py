@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 
 import pytest
 from crawler.config import Config as CrawlerConfig
@@ -216,3 +217,103 @@ def test_new_price_range_fetches_again(tmp_path):
     list(s.run("iphone", *SYLHET, radius_km=40))
     list(s.run("iphone", *SYLHET, radius_km=40, min_price=50_000, max_price=80_000))
     assert len(transport.posts) == 2
+
+
+def test_point_searches_with_other_keywords_do_not_mix(tmp_path):
+    s = search(tmp_path, point=True)
+    phones = {r["item_id"] for r in results(list(s.run("iphone", *SYLHET, radius_km=40)))}
+    other = results(list(s.run("bicycle", *SYLHET, radius_km=40)))
+    assert phones and not {r["item_id"] for r in other} & phones
+
+
+def test_same_item_found_by_two_searches_stays_in_both(tmp_path):
+    s = search(tmp_path, point=True)
+    first = {r["item_id"] for r in results(list(s.run("iphone", *SYLHET, radius_km=40)))}
+    city = search(tmp_path, point=False)
+    city_ids = {r["item_id"] for r in results(list(city.run("iphone", *SYLHET, radius_km=40)))}
+    again = {r["item_id"] for r in results(list(s.run("iphone", *SYLHET, radius_km=40)))}
+    assert again == first and city_ids
+
+
+def test_town_with_a_common_name_uses_the_one_nearest_the_search(tmp_path):
+    s = search(tmp_path)
+    assert s._town_point("Cambridge, MA", near=(42.3736, -71.1097))[0] == pytest.approx(42.37, abs=0.1)
+    assert s._town_point("Cambridge, United Kingdom", near=(52.2, 0.12))[0] == pytest.approx(52.2, abs=0.1)
+    assert s._town_point("Some Tiny Village", near=SYLHET) is None
+    assert s._town_point("Maulvi Bazar", near=SYLHET) == (24.4829, 91.7774)
+
+
+def test_scrub_keeps_ordinary_titles():
+    from fcommerce_search.live import scrub
+    assert scrub("Alienware laptop", ("Ali",)) == "Alienware laptop"
+    assert scrub("Ali bhai's iPhone", ("Ali",)) == "••• bhai's iPhone"
+    assert scrub("Corolla 2015 2016 2017") == "Corolla 2015 2016 2017"
+    assert scrub("Size 40 41 42 43") == "Size 40 41 42 43"
+    for phone in ("01711-223344", "01711223344", "+44 7700 900123", "+8801711223344"):
+        assert scrub(f"call {phone} now") == "call ••• now"
+
+
+def test_cached_search_offers_more_only_if_the_page_was_full(tmp_path):
+    from replay import FIXTURES
+    doc = json.loads((FIXTURES / "graphql_sylhet_point.json").read_text(encoding="utf-8"))
+    doc["data"]["marketplace_search"]["feed_units"]["edges"] = doc["data"]["marketplace_search"]["feed_units"]["edges"][:5]
+    s = search(tmp_path, ReplayTransport(graphql_body=json.dumps(doc)), point=True)
+    assert list(s.run("iphone", *SYLHET, radius_km=40))[-1]["can_load_more"] is False
+    assert list(s.run("iphone", *SYLHET, radius_km=40))[-1]["can_load_more"] is False
+
+
+def test_failed_load_more_keeps_its_band(tmp_path):
+    transport = ReplayTransport()
+    s = search(tmp_path, transport, point=True)
+    search_id = list(s.run("iphone", *SYLHET, radius_km=40))[-1]["search_id"]
+    bands = list(s._searches[search_id]["bands"])
+    transport.graphql_status = 429
+    failed = list(s.more(search_id))
+    assert failed[0]["status"] == "blocked"
+    assert s._searches[search_id]["bands"] == bands and s._searches[search_id]["more_left"] == 5
+
+
+def test_two_load_more_at_once_never_crash(tmp_path):
+    s = search(tmp_path, point=True)
+    search_id = list(s.run("iphone", *SYLHET, radius_km=40))[-1]["search_id"]
+    s._searches[search_id]["bands"] = s._searches[search_id]["bands"][:1]
+    real_check = LiveSearch._can_more
+
+    def slow_check(state):
+        # Widen the gap between "is a band left?" and taking it, so unlocked clicks really collide.
+        answer = real_check(state)
+        time.sleep(0.05)
+        return answer
+
+    s._can_more = slow_check
+    out, errors = [], []
+
+    def click():
+        try:
+            out.append(list(s.more(search_id))[-1])
+        except Exception as e:  # noqa: BLE001
+            errors.append(e)
+
+    threads = [threading.Thread(target=click) for _ in range(4)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors and all(e["type"] == "done" for e in out)
+    assert s._searches[search_id]["more_left"] >= 0
+
+
+def test_locks_do_not_grow_with_every_search(tmp_path):
+    s = search(tmp_path, point=True)
+    for i in range(300):
+        list(s.run(f"phone {i}", *SYLHET, radius_km=40))
+    assert len(s._locks) <= 64
+
+
+def test_each_unknown_town_is_looked_up_once_per_search(tmp_path):
+    asked = []
+    s = search(tmp_path, point=True)
+    real = s.places.suggest
+    s.places.suggest = lambda q: asked.append(q) or real(q)
+    list(s.run("iphone", *SYLHET, radius_km=40))
+    assert len(asked) == len(set(asked))

@@ -101,3 +101,14 @@ def test_more_streams_and_checks_input(server):
     assert call(server, "POST", "/api/more", {"search_id": search_id}, {"Host": "evil.example"})[0] == 403
     text = call(server, "POST", "/api/more", json.dumps({"search_id": search_id}).encode(), {"Content-Type": "text/plain"})
     assert text[0] == 415
+
+
+@pytest.mark.parametrize("length", ["abc", "-1"])
+def test_bad_content_length_is_refused(server, length):
+    import socket
+    sock = socket.create_connection(("127.0.0.1", server), timeout=5)
+    sock.sendall(f"POST /api/search HTTP/1.1\r\nHost: 127.0.0.1:{server}\r\nContent-Type: application/json\r\n"
+                 f"Content-Length: {length}\r\n\r\n".encode())
+    reply = sock.recv(200).decode()
+    sock.close()
+    assert reply.startswith(("HTTP/1.0 400", "HTTP/1.1 400"))

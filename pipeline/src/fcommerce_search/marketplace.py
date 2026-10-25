@@ -16,7 +16,7 @@ LSD = re.compile(r'"LSD",\[\],\{"token":"([^"]+)"')
 SESSION_SECONDS = 30 * 60
 NO_UPPER_BOUND = 214748364700
 PAGE_SIZE = 24
-STATUS = {Outcome.OK: "ok", Outcome.BLOCKED: "blocked", Outcome.SCHEMA_CHANGED: "schema_changed"}
+STATUS = {Outcome.OK: "ok", Outcome.NOTHING_NEW: "ok", Outcome.BLOCKED: "blocked", Outcome.SCHEMA_CHANGED: "schema_changed"}
 
 
 def _object_at(text: str, start: int) -> dict:
@@ -43,7 +43,9 @@ class PointSearch:
             if not (found and lsd):
                 return False
             self.doc_id, self.lsd, self.template = found.group(1), lsd.group(1), _object_at(html, found.end())
-            self.template["params"]["browse_request_params"]
+            params = self.template["params"]
+            if not (isinstance(params["browse_request_params"], dict) and isinstance(params["bqf"], dict)):
+                raise TypeError("template")
         except (HostBlocked, *DROPS, ValueError, KeyError, TypeError):
             self.doc_id = None
             return False
@@ -72,7 +74,7 @@ class PointSearch:
         except DROPS:
             return "failed", [], False
         outcome = classify(response, ("marketplace_search", "feed_units"))
-        if outcome is not Outcome.OK:
+        if STATUS.get(outcome) != "ok":
             return STATUS.get(outcome, "failed"), [], False
         listings, seen = [], set()
         for line in response.text.splitlines():

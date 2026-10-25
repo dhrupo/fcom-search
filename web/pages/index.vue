@@ -78,7 +78,7 @@ async function readEvents(res: Response) {
     buffer += decoder.decode(value, { stream: !done });
     const lines = buffer.split("\n");
     buffer = lines.pop() ?? "";
-    for (const line of lines.filter(Boolean)) handle(JSON.parse(line));
+    for (const line of lines.filter(Boolean)) applySearchEvent(JSON.parse(line));
     if (done) break;
   }
 }
@@ -121,7 +121,7 @@ async function loadMore() {
   }
 }
 
-function handle(event: any) {
+function applySearchEvent(event: any) {
   if (event.type === "mode") basicMode.value = event.mode === "basic";
   if (event.type === "start") cities.value = event.cities.map((name: string) => ({ name, status: "searching", found: 0 }));
   if (event.type === "city") {

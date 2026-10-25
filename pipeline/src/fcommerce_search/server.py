@@ -108,7 +108,12 @@ def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host
                 return self._json(404, {"error": "not found"})
             if self.headers.get_content_type() != "application/json":
                 return self._json(415, {"error": "send JSON"})
-            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._json(400, {"error": "bad request"})
+            if length < 0:
+                return self._json(400, {"error": "bad request"})
             if length > MAX_BODY:
                 return self._json(413, {"error": "too large"})
             try:

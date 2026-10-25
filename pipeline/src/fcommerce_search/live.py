@@ -13,21 +13,24 @@ from crawler.outcomes import Outcome, classify
 from crawler.transport import DROPS, HostBlocked, Transport
 
 from .config import Config
-from .geo import City, big_cities_near, distance_km, find_town
-from .marketplace import PointSearch
+from .geo import City, big_cities_near, distance_km, towns_named
+from .marketplace import PAGE_SIZE, PointSearch
 from .places import Places
 
 FRESH_SECONDS = 600
 SEARCH_SECONDS = 30 * 60
 MAX_SEARCHES = 100
 MAX_MORE = 5
+LOCK_STRIPES = 64
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS listings (
-    item_id TEXT PRIMARY KEY, city TEXT NOT NULL, data TEXT NOT NULL, fetched_at REAL NOT NULL);
+    item_id TEXT NOT NULL, city TEXT NOT NULL, data TEXT NOT NULL, fetched_at REAL NOT NULL,
+    PRIMARY KEY (item_id, city));
 CREATE INDEX IF NOT EXISTS listings_city ON listings (city);
 CREATE TABLE IF NOT EXISTS fetches (key TEXT PRIMARY KEY, at REAL NOT NULL);
 """
-PHONE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
+# Phone numbers: 10+ digits joined by '-' or '.', or an international '+' number that may use spaces.
+PHONE = re.compile(r"(?<![\w+])(?:\+\d[\d\s-]{8,}\d|\d(?:[-.]?\d){9,})(?!\w)")
 HANDLE = re.compile(r"@\w[\w.]*")
 STATUS = {Outcome.OK: "ok", Outcome.NOTHING_NEW: "ok", Outcome.BLOCKED: "blocked"}
 
@@ -36,7 +39,7 @@ def scrub(text: str, names=()) -> str:
     """Remove phone numbers, @handles and known private names from seller text."""
     text = HANDLE.sub("•••", PHONE.sub("•••", text or ""))
     for name in names:
-        text = re.sub(re.escape(name), "•••", text, flags=re.IGNORECASE)
+        text = re.sub(rf"(?<![\w.]){re.escape(name)}(?!\w)", "•••", text, flags=re.IGNORECASE)
     return " ".join(text.split())
 
 
@@ -47,8 +50,8 @@ class LiveSearch:
         self.config, self.places, self._transport, self._now, self._names = config, places, transport, now, names
         self._point_search, self._point = point_search, None
         self._searches: OrderedDict[str, dict] = OrderedDict()
-        self._locks: dict[str, threading.Lock] = {}
-        self._locks_guard = threading.Lock()
+        self._locks = [threading.Lock() for _ in range(LOCK_STRIPES)]
+        self._search_lock = threading.Lock()
         with self._connect() as db:
             db.executescript(SCHEMA)
 
@@ -60,8 +63,8 @@ class LiveSearch:
         return self._transport or Transport(self.config.crawler, sessions=None)
 
     def _lock(self, key: str) -> threading.Lock:
-        with self._locks_guard:
-            return self._locks.setdefault(key, threading.Lock())
+        # A fixed set of locks: the same key always gets the same lock, and the set never grows.
+        return self._locks[hash(key) % LOCK_STRIPES]
 
     def run(self, keyword: str, lat: float, lon: float, radius_km: float, min_price=None, max_price=None, days=None):
         """Search Facebook at the point; when that fails, search the nearby big cities by address."""
@@ -69,9 +72,9 @@ class LiveSearch:
         wanted = {"lat": lat, "lon": lon, "radius_km": radius_km, "min_price": min_price, "max_price": max_price,
                   "days": days}
         if self._point_search:
-            key = f"pt:{lat:.3f},{lon:.3f},{radius_km},{min_price},{max_price}"
+            key = f"pt:{lat:.3f},{lon:.3f},{radius_km},{min_price},{max_price},{keyword.casefold()}"
             with self._lock(f"{key}|{keyword.casefold()}"):
-                status, full = "ok", True
+                status, full = "ok", self._pool_size(key) >= PAGE_SIZE
                 if not self._fresh(key, keyword):
                     self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
                     status, listings, full = self._point.search(keyword, lat, lon, radius_km, band=(min_price, max_price))
@@ -118,6 +121,10 @@ class LiveSearch:
 
     def more(self, search_id: str):
         """The next price band of an earlier point search: up to MAX_MORE times, never repeating a listing."""
+        with self._search_lock:
+            yield from self._more(search_id)
+
+    def _more(self, search_id: str):
         state = self._searches.get(search_id)
         if not state or self._now() - state["at"] > SEARCH_SECONDS:
             self._searches.pop(search_id, None)
@@ -132,7 +139,10 @@ class LiveSearch:
         self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
         status, listings, full = self._point.search(state["keyword"], wanted["lat"], wanted["lon"], wanted["radius_km"],
                                                     band=band)
-        if status == "ok":
+        if status != "ok":
+            state["bands"].insert(0, band)
+            state["more_left"] += 1
+        else:
             self._save(state["key"], state["keyword"], listings, mark_fresh=False)
         fresh = {item["item_id"] for item in listings}
         matches = [r for r in self._pool(state["key"], state["keyword"], match_words=False, **wanted)
@@ -197,17 +207,21 @@ class LiveSearch:
             if mark_fresh:
                 db.execute("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)", (f"{key}|{keyword.casefold()}", now))
 
-    def _town_point(self, town: str | None):
+    def _town_point(self, town: str | None, near: tuple[float, float]):
+        """The listing's town on the map: the same-named place nearest the search (bundled list, then OpenStreetMap)."""
         if not town:
             return None
-        name = town.split(",")[0].strip()
-        city = find_town(name)
-        if city:
-            return city.lat, city.lon
-        found = self.places.suggest(town)
-        return (found[0]["lat"], found[0]["lon"]) if found else None
+        points = [(c.lat, c.lon) for c in towns_named(town.split(",")[0].strip())]
+        if not points:
+            points = [(p["lat"], p["lon"]) for p in self.places.suggest(town)]
+        return min(points, key=lambda p: distance_km(*near, *p)) if points else None
+
+    def _pool_size(self, key: str) -> int:
+        with self._connect() as db:
+            return db.execute("SELECT count(*) FROM listings WHERE city = ?", (key,)).fetchone()[0]
 
     def _pool(self, slug, keyword, lat, lon, radius_km, min_price, max_price, days, match_words=True):
+        towns: dict[str, tuple | None] = {}
         # Facebook already matched point-search results to the keyword, sometimes without the exact words.
         words = re.findall(r"\w+", keyword.casefold()) if match_words else []
         with self._connect() as db:
@@ -226,7 +240,11 @@ class LiveSearch:
                 continue
             if days and (item.get("created_at") or 0) < self._now() - days * 86400:
                 continue
-            point = self._town_point(item.get("city"))
+            # Facebook's radius is loose (a 40 km search returned a town 80 km away): check it here, once per town.
+            town = item.get("city")
+            if town not in towns:
+                towns[town] = self._town_point(town, (lat, lon))
+            point = towns[town]
             distance = round(distance_km(lat, lon, *point), 1) if point else None
             if distance is not None and distance > radius_km:
                 continue

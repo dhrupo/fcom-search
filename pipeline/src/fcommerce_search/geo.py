@@ -49,6 +49,10 @@ def big_cities_near(lat: float, lon: float, radius_km: float, limit: int = 8) ->
     return sorted(kept, key=lambda c: distance_km(lat, lon, c.lat, c.lon))[:limit]
 
 
+def towns_named(name: str) -> list[City]:
+    return list(_load()[1].get(name.strip().casefold(), []))
+
+
 def find_town(name: str, country: str | None = None) -> City | None:
     """The most populous city with this name (in this country code, when given)."""
     matches = [c for c in _load()[1].get(name.strip().casefold(), []) if not country or c.country == country]

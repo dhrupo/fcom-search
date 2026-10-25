@@ -86,3 +86,20 @@ def test_schema_change_is_reported():
 def test_bootstrap_page_without_request_id_is_unavailable():
     transport = ReplayTransport(status={"london": 200})
     assert PointSearch(transport).search("iphone", *SYLHET, radius_km=40)[0] == "unavailable"
+
+
+def test_template_without_query_slot_is_unavailable():
+    from replay import FIXTURES
+    html = (FIXTURES / "bootstrap_london.html").read_text(encoding="utf-8").replace('"bqf":', '"bqx":')
+
+    class NoQuerySlot(ReplayTransport):
+        def get(self, url, **kwargs):
+            response = super().get(url, **kwargs)
+            response.text = html
+            return response
+
+    assert PointSearch(NoQuerySlot()).search("iphone", *SYLHET, radius_km=40)[0] == "unavailable"
+
+
+def test_no_listings_is_an_ok_empty_answer():
+    assert PointSearch(ReplayTransport()).search("bicycle", *SYLHET, radius_km=40) == ("ok", [], False)
