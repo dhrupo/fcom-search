@@ -193,3 +193,24 @@ def test_spaced_pm_is_pro_max():
 
 def test_two_models_in_one_sentence_are_two_unpriced_offers():
     assert offers_of("iPhone 13 and iPhone 14 available, inbox") == [("iPhone 13", None, None), ("iPhone 14", None, None)]
+
+
+def test_customer_story_or_sold_out_is_not_an_offer():
+    assert offers_of("আমাদের সম্মানিত কাস্টমার Apple Station থেকে পছন্দের iPhone 18 Pro Max কিনে নিলেন।") == []
+    assert offers_of("Congratulations on your new iPhone 15 Pink") == []
+    assert offers_of("First iPhone 18 Pro Sold Out") == []
+    assert offers_of("Our customer bought an iPhone 15 Pro 256GB, you can too: 1,20,000tk") == [
+        ("iPhone 15 Pro", 256, 120000)]
+
+
+def test_other_brands_number_is_not_a_bare_iphone():
+    assert offers_of("From the original Pixel to the latest Pixel 11, Pixel 11 Pro & Pixel 11 Pro XL") == []
+
+
+def test_storage_size_without_gb_next_to_a_phone():
+    assert offers_of("iPhone 13 pro 128 White") == [("iPhone 13 Pro", 128, None)]
+    assert offers_of("iphone 13 mini,blue coloue 128 b storage") == [("iPhone 13 mini", 128, None)]
+
+
+def test_common_typo_in_model_name():
+    assert offers_of("iPhone 13 Pro Mex with box") == [("iPhone 13 Pro Max", None, None)]

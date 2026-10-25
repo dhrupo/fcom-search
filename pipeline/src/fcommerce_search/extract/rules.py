@@ -29,6 +29,9 @@ PRICES = [
 ]
 TRADE_IN = re.compile(r"\b(your old|bring your|exchange your|trade in your|than|vs|compared?|difference)\b|পুরোনো|পুরাতন")
 NOT_AN_OFFER = re.compile(r"\b(exchange|trade|old)\b|এক্সচেঞ্জ")
+# Customer stories, thank-yous and sold-out news name a phone that is not for sale (Dhrupo, 2026-10-25).
+STORY = re.compile(r"কিনে নিলেন|কিনলেন|বেছে নিয়েছেন|নিয়ে গেলেন|"
+                   r"\b(congratulations|congrats|purchased|bought|has chosen|happy customer|sold out|giveaway|winner)\b")
 ACCESSORY = re.compile(r"\b(case|cover|glass|protector|charger|adapter|cable|skin|lens|airpods|earphones?)\b")
 INCLUDED = re.compile(r"\b(with|and|including|full box|free)\b|[&+]|সহ")
 # Split sentences, but not "Tk. 85,000" / "BDT. 85,000" (a currency word, a dot, then the amount).
@@ -77,6 +80,8 @@ def _storages(line: str) -> list[tuple[int, int | None]]:
     for storage in re.findall(r"\b(\d{2,4})\s*(?:gb|জিবি)\b(?!\s*ram)", line):
         if int(storage) in STORAGE_GB:
             found.append((int(storage), None))
+    for storage in re.findall(r"\b(64|128|256|512)\b(?!\s*(?:gb|tb|mp|hz|mah|w\b|tk|taka|k\b|[/,.]\d|\d))", line):
+        found.append((int(storage), None))
     for tb in re.findall(r"\b([12])\s*tb\b(?!\s*(?:icloud|cloud|backup|ssd|google))", line):
         found.append((int(tb) * 1024, None))
     rams = set(re.findall(r"\b(\d{1,2})\s*gb\s*ram\b", line))
@@ -140,7 +145,7 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
         return table
 
     clauses = [c for c in CLAUSES.split(post) if c.strip() and not TRADE_IN.search(c)]
-    if _is_accessory(post):
+    if _is_accessory(post) or (STORY.search(post) and not any(_prices(c) for c in clauses)):
         return []
     if len(catalog.find_models(post)) > 1:
         # Only with several models: "Exchange your iPhone 11" next to the phone on sale is not an offer.

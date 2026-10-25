@@ -1,0 +1,334 @@
+# 50 real phone posts (data-run2, Sylhet, crawled 2026-10-24), labelled by reading, not by the extractor.
+# Rule (Dhrupo 2026-10-25): only posts that sell something are offers; customer stories, thank-yous,
+# news, giveaways and line-ups are not. offers = [[model, storage_gb, price]]; "" = unknown.
+
+[[post]]
+n = 0
+source = "applestationofficial.bd"
+note = "customer story"
+text = "আমাদের সম্মানিত কাস্টমার Apple Station থেকে পছন্দের iPhone 18 Pro Max কিনে নিলেন। 📱😍\n\nআপনার আস্থা ও ভালোবাসাই আমাদের এগিয়ে যাওয়ার অনুপ্রেরণা। ❤️\n\n🍎 Apple Station Your Premium Apple Destination\n\n#AppleStation #iPhone18ProMax #CustomerLove #PremiumExperience #Sylhet"
+offers = []
+
+[[post]]
+n = 1
+source = "applestationofficial.bd"
+text = "𝐌𝐚𝐜 𝐦𝐢𝐧𝐢 𝐰𝐢𝐭𝐡 𝐌𝟓 𝐂𝐡𝐢𝐩, Now available at Apple Station ✨\nSmall in size. Massive in power. Powered by the all-new Apple M5 chip, the Mac mini delivers blazing-fast performance with incredible efficiency. Perfect for creators, professionals, and everyday power users.\n\n• Ultra-compact, minimalist Apple design\n• Faster graphics for editing, coding & creative work\n• Seamless macOS experience with Apple Intelligence support\n\n🚀 Upgrade your workspace with serious power in a compact form.\n\n📍 Shop-96, Block C (New Building), Level-02, Karim Ullah Market, Sylhet\n📞 Hotline: 01754-584223\n\n#AppleStation #MacminiM4 #BrandNewiPhone #AppleBangladesh"
+offers = []
+
+[[post]]
+n = 2
+source = "applestationofficial.bd"
+text = "iPhone Duo, not iPhone Ultra! Let's look at Apple's first foldable iPhone!"
+offers = []
+
+[[post]]
+n = 3
+source = "applestationofficial.bd"
+note = "customer story"
+text = "🥹💖 মা-মেয়ের ভালোবাসার গল্পে যোগ হলো নতুন এক আনন্দ!\nএকসাথেই Apple Station থেকে কিনলেন নতুন iPhone 17 Pro।\n✨এমন সুন্দর মুহূর্তের সঙ্গী হতে পেরে আমরা আনন্দিত! ❤️\nApple station Your premium apple destination "
+offers = []
+
+[[post]]
+n = 4
+source = "applestationofficial.bd"
+note = "customer story"
+text = "প্রতিটি সফলতার গল্পে প্রিয় মানুষটা পাশে থাকাটাই আসল ভাগ্যের ব্যাপার। 🤍✨\n\nআজকের এই সুন্দর মুহূর্তে আমাদের সম্মানিত কাস্টমার তাঁর পছন্দের iPhone 17 Pro Max 256GB — Australia Variant, Cosmic Orange বেছে নিয়েছেন। 🧡📱\n\nএকটি প্রিমিয়াম ডিভাইস, একটি বিশেষ পছন্দ, আর প্রিয় মানুষকে সঙ্গে নিয়ে স্মরণীয় একটি মুহূর্ত। ✨\n\nআমাদের ওপর আস্থা রাখার জন্য অসংখ্য ধন্যবাদ।\nআপনার প্রতিটি পছন্দকে আরও বিশেষ করে তুলতে Apple Station সবসময় পাশে আছে। 🤍\n\n📍 Apple Station, Sylhet\nShop No: 96/C, Level-02, Karim Ullah Market, Bondor Bazar, Sylhet\n\nA premium choice deserves a premium destination. 🧡\n\n#AppleStation #iPhone17ProMax #CosmicOrange #iPhone17ProMax256GB #AppleStoreinSylhet #Sylhet #HappyCustomer"
+offers = []
+
+[[post]]
+n = 5
+source = "applestationofficial.bd"
+note = "customer story"
+text = "✨ From Kulaura to Apple Station, Sylhet! 🍎😇\n\nA journey made with trust! ❤️\nOur respected customer Sir travelled all the way from Kulaura, Sylhet, to choose and purchase his new iPhone from Apple Station.\n\nWe truly appreciate your trust, time, and support. 🥰\nThank you for choosing Apple Station Where Apple Meets Trust. ✨\n\n#AppleStation #Kulaura #Sylhet #HappyCustomer #iPhone #WhereAppleMeetsTrust #ThankYouForChoosingUs"
+offers = []
+
+[[post]]
+n = 6
+source = "applestationofficial.bd"
+note = "customer story"
+text = "ইতিহাস গড়ল Apple Station! \n\nসিলেট বিভাগের সর্বপ্রথম iPhone Duo গ্রাহক!\n\nএকসাথে দুইটি iPhone Duo ডাবল আনন্দ, ডাবল ভালোবাসা! 😍📱📱\n\nআমাদের সম্মানিত গ্রাহকের আস্থা ও ভালোবাসাই Apple Station-এর সবচেয়ে বড় অর্জন। আপনাদের বিশ্বাস নিয়েই এগিয়ে যেতে চাই আরও বহুদূর। ❤️\n#AppleStation #iPhoneDuo"
+offers = []
+
+[[post]]
+n = 7
+source = "applestationofficial.bd"
+text = "Did you know Apple Intelligence can take up over 30GB of storage space on Macs running macOS 27? 🤯 \n\nIt auto-downloads AI models without your knowledge, impacting low storage space and internet bandwidth. Take control of your Mac's storage management! 💻"
+offers = []
+
+[[post]]
+n = 8
+source = "applestationofficial.bd"
+text = "চলে এসেছে আমাদের giveaway এর ফলাফল, আমাদের ভাগ্যবান বিজয়ীকে প্রাণঢালা অভিনন্দন!"
+offers = []
+
+[[post]]
+n = 9
+source = "applestationofficial.bd"
+note = "thank-you"
+text = "A New iPhone, A New Experience!\n\n❤️ Thank you for choosing Apple Station.\n\n Apple Station Your Premium Apple Destination"
+offers = []
+
+[[post]]
+n = 10
+source = "applestationofficial.bd"
+text = "Meet the iPhone Duo, the 1st foldable iPhone! 📱️\nWith a sleek design, 48MP dual camera, under-display front camera, and many more!"
+offers = []
+
+[[post]]
+n = 11
+source = "applestationofficial.bd"
+note = "customer story"
+text = "💗 A New Chapter, A New iPhone! 📱✨\n\nCongratulations on your new iPhone 15 Pink — where elegant design meets everyday Apple magic. 🌸\nThank you for choosing Apple Station Sylhet and becoming a part of our family. 🤍\n\nYour choice. Your style. Your Apple experience. ✨\n\n#AppleStation #iPhone15 #iPhone15Pink #PinkiPhone #HappyCustomer #AppleExperience #AppleStationSylhet #WhereAppleMeetsTrust"
+offers = []
+
+[[post]]
+n = 12
+source = "applestationofficial.bd"
+note = "customer story"
+text = "❤️ Trust Knows No Borders! 🇧🇩🤝🇮🇳\n\nভারত থেকে পড়াশোনার জন্য বাংলাদেশে এসে, আমাদের ওপর আস্থা রেখে পুরোনো iPhone এক্সচেঞ্জ করে কিনলেন নতুন iPhone 17 Pro। \n\nদূর দেশ থেকে পাওয়া এই বিশ্বাসই আমাদের গর্ব, আমাদের সবচেয়ে বড় প্রাপ্তি। ❤️\n\nApple Station Your Premium Apple Destination. "
+offers = []
+
+[[post]]
+n = 13
+source = "applestationofficial.bd"
+note = "launch news"
+text = "The Apple Event is now 7 days away 🔥\n\nApple is expected to introduce six new products:\n• iPhone 18 Pro\n• iPhone 18 Pro Max\n• iPhone Ultra\n• Apple Watch Series 12\n• Apple Watch Ultra 4\n• AirPods 5"
+offers = []
+
+[[post]]
+n = 14
+source = "applestationofficial.bd"
+text = "Hello Apple Lovers 😉"
+offers = []
+
+[[post]]
+n = 15
+source = "applestationofficial.bd"
+note = "news"
+text = "iPhone Duo doesn't have any Face ID! It still feels crazy not to have Face ID on the most expensive iPhone ever made…"
+offers = []
+
+[[post]]
+n = 16
+source = "applestationofficial.bd"
+note = "model only in hashtag"
+text = "Lighter but smarter and faster. Thinnest ever iPhone is available at Apple Station. You can have a live experience of the phone. 256GB Storage and Australia Variant comes with official international warranty.\n\nKey highlights of this phone!\n• A19 Fusion Chip.\n• 120Hz Crystal Motion Display.\n• HyperCharge 40W – 0 to 50% in minutes\n• Quantum Camera System – insane night clarity + cinematic mode 3.0\n• Smart-AI Interaction – gestures, glance controls & adaptive widgets.\n\n📍 Shop-96, Block C (New Building), Level-02, Karim Ullah Market, Sylhet\n📞 Hotline: 01754-584223\n\n#AppleStation #iPhone17Air #BrandNewiPhone #AppleBangladesh"
+offers = [["iPhone Air", 256, ""]]
+
+[[post]]
+n = 17
+source = "applestationofficial.bd"
+note = "promo for a series"
+text = "Can you imagine getting a free 20W USB-C Power Adapter with your iPhone 18 Series purchase, complete with fast charging capabilities and a compact design that fits perfectly in your pocket or bag? 📱💻️️️️️️️️️️\n\n It's the ultimate bundle deal that will take your mobile experience to the next level, allowing you to power up your device quickly and easily on the go! 💥"
+offers = []
+
+[[post]]
+n = 18
+source = "applestationofficial.bd"
+note = "customer story"
+text = "💙 Another Happy Customer, Another Beautiful Story! 📱✨\n\nA big thank you to our respected customer for choosing Apple Station for his new iPhone! 🥰 Your trust and satisfaction inspire us to deliver the best experience every time.\n\n📍 Apple Station Your Premium Apple Destination\n❤️ Where Every Purchase Begins a Relationship!\n\n#AppleStation #HappyCustomer #iPhone17 #CustomerSatisfaction #Sylhet #YourPremiumAppleDestination"
+offers = []
+
+[[post]]
+n = 19
+source = "applestationofficial.bd"
+text = "Some things you have to hear to believe. 🎧\n\nThe Apple EarPods Type-C is finally here at Apple Station, and it's everything you expected and more. With next-generation Active Noise Cancellation, you're not just listening to music anymore; you're stepping into it.\n\nThis is what audio perfection feels like. 100% Authentic, Official Warranty, straight from Sylhet's first Apple Authorized Seller. ✅\n\n📩 DM us to know the price or place your order.\n📍 Shop-96, Block C, Level-02, Karim Ullah Market, Sylhet.\n📞 01731-777855"
+offers = []
+
+[[post]]
+n = 20
+source = "Dreamnworld"
+text = "🏮iPhone 14 pro max\n🏮128GB..!\n🏮with box..🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 14 Pro Max", 128, ""]]
+
+[[post]]
+n = 21
+source = "Dreamnworld"
+text = "⭐️iPhone 17 pro max\n⭐️256GB\n⭐️With box..!🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 17 Pro Max", 256, ""]]
+
+[[post]]
+n = 22
+source = "Dreamnworld"
+text = "⭐️iPhone 15\n⭐️256GB\n⭐️with full box ..!🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 15", 256, ""]]
+
+[[post]]
+n = 23
+source = "Dreamnworld"
+text = "⭐️Google pixel 9\n⭐️ 8-128GB\n⭐️ only device\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["Pixel 9", 128, ""]]
+
+[[post]]
+n = 24
+source = "Dreamnworld"
+note = "listing without storage"
+text = "iPhone 17pro max 🔥"
+offers = [["iPhone 17 Pro Max", "", ""]]
+
+[[post]]
+n = 25
+source = "Dreamnworld"
+text = "⭐️Samsung Galaxy S24 FE\n⭐️8-256GB\n⭐️Only device..!🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["Galaxy S24 FE", 256, ""]]
+
+[[post]]
+n = 26
+source = "Dreamnworld"
+text = "⭐️Google pixel 8 pro\n⭐️ 12-256GB\n⭐️ only device..🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["Pixel 8 Pro", 256, ""]]
+
+[[post]]
+n = 27
+source = "Dreamnworld"
+text = "🏮iPhone 16\n🏮128GB..!\n🏮100%🔋\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 16", 128, ""]]
+
+[[post]]
+n = 28
+source = "Dreamnworld"
+text = "Samsung Galaxy S26 Ultra 512GB🔥\n #foryoupageシ #viralreelsシ #samsunggalaxy"
+offers = [["Galaxy S26 Ultra", 512, ""]]
+
+[[post]]
+n = 29
+source = "Dreamnworld"
+text = "🏮iPhone 16 pro \n⭐️ 128GB..!\n⭐️ with box..!\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 16 Pro", 128, ""]]
+
+[[post]]
+n = 30
+source = "Dreamnworld"
+text = "iPhone 14pro max ❤️‍🔥 \n🔅128GB & 256GB ..!\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n                Or visit our shop\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 14 Pro Max", 128, ""], ["iPhone 14 Pro Max", 256, ""]]
+
+[[post]]
+n = 31
+source = "Dreamnworld"
+text = "❤️‍🔥iPhone 18pro max❤️‍🔥\n    ⭐️256GB..!\nNow available 🥰\n    \n ☎️01321669479\n      01715550407\n      01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 18 Pro Max", 256, ""]]
+
+[[post]]
+n = 32
+source = "Dreamnworld"
+text = "🛡️iPhone 16 plus\n▫️128GB..!\n▫️100%🔋\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 16 Plus", 128, ""]]
+
+[[post]]
+n = 33
+source = "Dreamnworld"
+text = "Google Pixel Evolution From 2016-2026 📈😮\n\nFrom the original Pixel to the latest Pixel 11, Pixel 11 Pro & Pixel 11 Pro XL — 10 years of innovation, camera technology, AI, and the iconic Pixel design. 🤯🔥\n\nWhich Pixel generation is your favorite of all time? 👇\nPixel 1️⃣ → Pixel 11️⃣ — How far has Google come?\n\n#GooglePixel #Pixel11 #Pixel11Pro #Pixel11ProXL"
+offers = []
+
+[[post]]
+n = 34
+source = "Dreamnworld"
+text = "🏮iPhone 17 pro max\n🏮256GB..!\n🏮99%\n🏮with box..🔥\n    \n ☎️01321669479\n     01715550407\n     01711985481\n\n🔴 Inbox 📨  For more information \n\n📌 All Banks 🏦 Instalment available 🔥\nonly for Credit card 💳 holders..\n📌 warranty policy:📝\n1. 7days replacement\n2. 1year servicing warranty⚙️\n✅We accept card:\nVisa,master & credit card 💳 \n👉 We accept also - Bkash, Nogod, Rocket 🚀…\n👉 Location: Shop 82, Level 3, karimullah market , Bondor Bazar,Sylhet..!\n \n#Dreamworld #appleiphone #appleipad #applemacbook #iphone #oneplus #googlepixel #xiaomi #Realme #Samsung  #GooglePixel  #OnePlus"
+offers = [["iPhone 17 Pro Max", 256, ""]]
+
+[[post]]
+n = 35
+source = "iStoreSyl"
+note = "sold out news"
+text = "First iPhone 18 Pro Sold Out"
+offers = []
+
+[[post]]
+n = 36
+source = "iStoreSyl"
+note = "event line-up"
+text = "iPhone 18 Pro\niPhone Duo\nApple Watch Ultra\nApple Watch 12 \nAirpod 5"
+offers = []
+
+[[post]]
+n = 37
+source = "iStoreSyl"
+text = "Apple Macbook M5 Max 16.2 inch"
+offers = []
+
+[[post]]
+n = 38
+source = "iStoreSyl"
+text = "iPhone 18 Pro Max Blue"
+offers = [["iPhone 18 Pro Max", "", ""]]
+
+[[post]]
+n = 39
+source = "iStoreSyl"
+text = "iPhone 17 Pro Max"
+offers = [["iPhone 17 Pro Max", "", ""]]
+
+[[post]]
+n = 40
+source = "marketplace"
+text = "IPhone 13,..  128 gb"
+listing_price = 25500
+offers = [["iPhone 13", 128, 25500]]
+
+[[post]]
+n = 41
+source = "marketplace"
+text = "iPhone 13 ios 27.0.1"
+listing_price = 44500
+offers = [["iPhone 13", "", 44500]]
+
+[[post]]
+n = 42
+source = "marketplace"
+note = "BDT 40 means 40,000: unknown"
+text = "iPhone 13📱"
+listing_price = 40
+offers = [["iPhone 13", "", ""]]
+
+[[post]]
+n = 43
+source = "marketplace"
+text = "Iphone 13 mini"
+listing_price = 29500
+offers = [["iPhone 13 mini", "", 29500]]
+
+[[post]]
+n = 44
+source = "marketplace"
+note = "'Pro Mex' typo"
+text = "iPhone 13 Pro Mex with box 📦"
+listing_price = 57500
+offers = [["iPhone 13 Pro Max", "", 57500]]
+
+[[post]]
+n = 45
+source = "marketplace"
+note = "'128' without GB"
+text = "iPhone 13 pro 128 White"
+listing_price = 53000
+offers = [["iPhone 13 Pro", 128, 53000]]
+
+[[post]]
+n = 46
+source = "marketplace"
+note = "BDT 35: unknown"
+text = "iPhone 13"
+listing_price = 35
+offers = [["iPhone 13", "", ""]]
+
+[[post]]
+n = 47
+source = "marketplace"
+note = "'128 b storage'"
+text = "iphone 13 mini,blue coloue 128 b storage"
+listing_price = 20000
+offers = [["iPhone 13 mini", 128, 20000]]
+
+[[post]]
+n = 48
+source = "marketplace"
+text = "iPhone 13 256gb"
+listing_price = 38000
+offers = [["iPhone 13", 256, 38000]]
+
+[[post]]
+n = 49
+source = "marketplace"
+text = "iPhone 13 Pro 128GB Box"
+listing_price = 55500
+offers = [["iPhone 13 Pro", 128, 55500]]
