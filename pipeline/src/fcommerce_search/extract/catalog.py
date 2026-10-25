@@ -33,11 +33,13 @@ class Catalog:
         text = re.sub(r"#\S+", " ", text)
         for bangla, english in self._words.items():
             text = text.replace(bangla, f" {english} ")
-        text = text.replace("+", " plus ").replace("promax", "pro max")
+        text = re.sub(r"\+(?!\s*\d)", " plus ", text).replace("promax", "pro max")
         if self._lines:
             text = re.sub(rf"\b({'|'.join(map(re.escape, self._lines))})(\d)", r"\1 \2", text)
+        # "13pm" is iPhone shorthand, but "10am-11pm" and "till 12 pm" are shop hours.
+        if not re.search(r"\d\s*am\b", text):
+            text = re.sub(r"\b(\d{2})pm\b", r"\1 pro max", text)
         text = re.sub(r"(\d)([a-z])", r"\1 \2", text)
-        text = re.sub(r"(\d) pm\b", r"\1 pro max", text)
         return re.findall(r"[a-z0-9]+", text)
 
     def find_models(self, text: str) -> list[PhoneModel]:
@@ -47,8 +49,9 @@ class Catalog:
         while i < len(tokens):
             for seq, model in self._sequences:
                 if tuple(tokens[i:i + len(seq)]) == seq:
-                    # "iPhone 18 Pro Series" names a family of phones, not one offer.
-                    if model not in found and tokens[i + len(seq):i + len(seq) + 1] != ["series"]:
+                    # "iPhone 18 Pro Series" is a family; "A16 chip" / "A17 Pro chip" is Apple's chip, not a Galaxy.
+                    after = tokens[i + len(seq):i + len(seq) + 2]
+                    if model not in found and after[:1] != ["series"] and not {"chip", "bionic"} & set(after):
                         found.append(model)
                     i += len(seq)
                     break

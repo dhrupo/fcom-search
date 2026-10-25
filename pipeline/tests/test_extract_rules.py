@@ -84,3 +84,82 @@ def test_heading_region_applies_to_table_rows():
 def test_price_next_to_delivery_note_is_kept():
     [offer] = extract_offers("iPhone 13 128GB 55,000tk, delivery charge free")
     assert offer.price == 55000
+
+
+def offers_of(text, replies=()):
+    return [(o.model, o.storage_gb, o.price) for o in extract_offers(text, list(replies))]
+
+
+def test_phone_number_or_number_list_is_not_a_price():
+    assert offers_of("iPhone 15 Pro 256GB used\nPrice: 01711223344 (whatsapp)") == [("iPhone 15 Pro", 256, None)]
+    assert offers_of("iPhone 15 Pro 256GB\nTk 85000,90000") == [("iPhone 15 Pro", 256, None)]
+
+
+def test_apple_chip_name_is_not_a_galaxy_phone():
+    assert offers_of("iPhone 13 128GB, A15 Bionic chip, 55k") == [("iPhone 13", 128, 55000)]
+    assert offers_of("iPhone 15 Pro 256GB A17 Pro chip, price 95k") == [("iPhone 15 Pro", 256, 95000)]
+    assert offers_of("Galaxy A15 128GB 18k") == [("Galaxy A15", 128, 18000)]
+
+
+def test_exchange_or_compare_mention_is_not_an_offer():
+    assert offers_of("iPhone 15 Pro 256GB 1,20,000tk. Exchange your iPhone 11 accepted") == [
+        ("iPhone 15 Pro", 256, 120000)]
+    assert offers_of("iPhone 15 Pro 256GB 1,20,000tk, much better than iPhone 14 Pro") == [
+        ("iPhone 15 Pro", 256, 120000)]
+
+
+def test_two_phones_in_one_post_keep_their_own_storage_and_price():
+    assert offers_of("Selling iPhone 15 Pro 256GB 95k. Also have iPhone 13 128GB 55k") == [
+        ("iPhone 15 Pro", 256, 95000), ("iPhone 13", 128, 55000)]
+
+
+def test_accessory_post_is_not_a_phone_offer():
+    assert offers_of("iPhone 15 Pro Max original silicone case with MagSafe 4,500tk") == []
+    assert offers_of("iPhone 13 Pro Max case 1200tk") == []
+    assert offers_of("iPhone 13 Pro 128GB with original charger, 72k") == [("iPhone 13 Pro", 128, 72000)]
+
+
+def test_discount_in_seller_reply_is_not_the_price():
+    for reply in ("2k kom hobe na bhai", "5k kom hobe", "৫ হাজার কম"):
+        [offer] = extract_offers("iPhone 15 Pro 256GB price 95k", [reply])
+        assert (offer.price, offer.price_source) == (95000, "post")
+
+
+def test_like_new_is_used_and_intact_display_is_not_new():
+    assert extract_offers("iPhone 13 128GB like new condition 55k")[0].condition == "used"
+    assert extract_offers("iPhone 13 128GB display intact battery 88% 55k")[0].condition is None
+    assert extract_offers("iPhone 13 128GB box intact, 55k")[0].condition == "new"
+
+
+def test_shop_hours_are_not_pro_max_models():
+    assert offers_of("iPhone 15 Pro 256GB 95k. Shop open 10am-11pm") == [("iPhone 15 Pro", 256, 95000)]
+    assert offers_of("Samsung original charger 1,500tk. Shop open till 12 pm") == []
+
+
+def test_ram_plus_storage_is_not_a_plus_model():
+    [offer] = extract_offers("Galaxy S25 Ultra 16+512 1,40,000tk")
+    assert (offer.model, offer.storage_gb, offer.ram_gb, offer.price) == ("Galaxy S25 Ultra", 512, 16, 140000)
+
+
+def test_small_gb_values_and_dates_are_not_storage():
+    [offer] = extract_offers("Pixel 10 Pro 16GB 256GB 1,05,000tk")
+    assert (offer.storage_gb, offer.ram_gb, offer.price) == (256, 16, 105000)
+    assert offers_of("iPhone 15 Pro 256GB 95k, offer till 10/16") == [("iPhone 15 Pro", 256, 95000)]
+
+
+def test_non_official_is_not_official():
+    assert extract_offers("iPhone 15 Pro 256GB non-official 95k")[0].region is None
+
+
+def test_cloud_storage_is_not_phone_storage():
+    assert offers_of("iPhone 15 Pro 256GB 95k, 2 TB icloud backup free") == [("iPhone 15 Pro", 256, 95000)]
+
+
+def test_battery_cycles_are_not_a_price():
+    assert offers_of("iPhone 15 Pro 256GB battery 2k cycle\nprice inbox") == [("iPhone 15 Pro", 256, None)]
+
+
+def test_lakh_prices_and_camera_4k():
+    assert offers_of("iPhone 13 Pro 128GB price 1.2 lakh") == [("iPhone 13 Pro", 128, 120000)]
+    assert offers_of("iPhone 13 Pro 128GB 1,25,000") == [("iPhone 13 Pro", 128, 125000)]
+    assert offers_of("iPhone 15 Pro 48MP camera 4K. price 95k") == [("iPhone 15 Pro", None, 95000)]
