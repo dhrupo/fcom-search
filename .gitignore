@@ -12,4 +12,4 @@ web/.nuxt/
 web/.output/
 test-results/
 playwright-report/
-web/dist/
+web/dist
