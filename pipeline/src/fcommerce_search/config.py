@@ -21,7 +21,7 @@ def load_config(path: Path) -> Config:
     path = Path(path)
     try:
         raw = tomllib.loads(path.read_text())
-    except (OSError, tomllib.TOMLDecodeError) as e:
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
         raise ConfigError(f"cannot read {path}: {e}") from e
 
     if not isinstance(raw.get("crawler_config"), str) or not raw["crawler_config"]:
@@ -33,6 +33,8 @@ def load_config(path: Path) -> Config:
         crawler = load_crawler_config(crawler_path)
     except CrawlerConfigError as e:
         raise ConfigError(str(e)) from e
+    except UnicodeDecodeError as e:
+        raise ConfigError(f"cannot read {crawler_path}: {e}") from e
 
     # Same rule as the crawler CLI: a relative data_dir is relative to its crawler.toml.
     data_dir = crawler.data_dir if crawler.data_dir.is_absolute() else crawler_path.parent / crawler.data_dir

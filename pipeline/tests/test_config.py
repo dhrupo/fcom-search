@@ -20,3 +20,12 @@ def test_relative_crawler_data_dir_resolves_like_crawler_cli(tmp_path):
 def test_missing_crawler_config_is_an_error(tmp_path):
     with pytest.raises(ConfigError, match="crawler_config"):
         load_config(write(tmp_path / "fcommerce-search.toml", ""))
+
+
+@pytest.mark.parametrize("broken", ["ours", "crawler"])
+def test_non_utf8_config_is_a_config_error(tmp_path, broken):
+    crawler = write(tmp_path / "crawler.toml", 'places = ["Sylhet"]\n')
+    ours = write(tmp_path / "fcommerce-search.toml", 'crawler_config = "crawler.toml"\n')
+    ({"ours": ours, "crawler": crawler}[broken]).write_bytes(b'places = ["\xff"]\n')
+    with pytest.raises(ConfigError, match="cannot read"):
+        load_config(ours)
