@@ -110,9 +110,9 @@ def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host
                 return self._json(415, {"error": "send JSON"})
             try:
                 length = int(self.headers.get("Content-Length") or 0)
+                if length < 0:
+                    raise ValueError
             except ValueError:
-                return self._json(400, {"error": "bad request"})
-            if length < 0:
                 return self._json(400, {"error": "bad request"})
             if length > MAX_BODY:
                 return self._json(413, {"error": "too large"})
@@ -121,9 +121,7 @@ def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host
                 if path == "/api/more":
                     stream = live.more(parse_more(body))
                 else:
-                    search = parse_search(body)
-                    stream = live.run(search.pop("keyword"), search.pop("lat"), search.pop("lon"),
-                                      search.pop("radius_km"), **search)
+                    stream = live.run(**parse_search(body))
             except (ValueError, BadRequest):
                 return self._json(400, {"error": "bad request"})
             self.send_response(200)

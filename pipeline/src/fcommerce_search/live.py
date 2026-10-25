@@ -43,6 +43,10 @@ def scrub(text: str, names=()) -> str:
     return " ".join(text.split())
 
 
+def _price(item: dict) -> dict:
+    return item["price"] if isinstance(item.get("price"), dict) else {}
+
+
 class LiveSearch:
     """Search Marketplace live, logged out, in the big cities around a point, and keep a local pool."""
 
@@ -62,6 +66,10 @@ class LiveSearch:
         # sessions=None: live search never uses an imported login.
         return self._transport or Transport(self.config.crawler, sessions=None)
 
+    def _point_session(self) -> PointSearch:
+        self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
+        return self._point
+
     def _lock(self, key: str) -> threading.Lock:
         # A fixed set of locks: the same key always gets the same lock, and the set never grows.
         return self._locks[hash(key) % LOCK_STRIPES]
@@ -73,11 +81,10 @@ class LiveSearch:
                   "days": days}
         if self._point_search:
             key = f"pt:{lat:.3f},{lon:.3f},{radius_km},{min_price},{max_price},{keyword.casefold()}"
-            with self._lock(f"{key}|{keyword.casefold()}"):
+            with self._lock(key):
                 status, full = "ok", self._pool_size(key) >= PAGE_SIZE
                 if not self._fresh(key, keyword):
-                    self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
-                    status, listings, full = self._point.search(keyword, lat, lon, radius_km, band=(min_price, max_price))
+                    status, listings, full = self._point_session().search(keyword, lat, lon, radius_km, band=(min_price, max_price))
                     if status == "ok":
                         self._save(key, keyword, listings)
             if status == "ok":
@@ -136,9 +143,8 @@ class LiveSearch:
         band = state["bands"].pop(0)
         state["more_left"] -= 1
         wanted = state["wanted"]
-        self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
-        status, listings, full = self._point.search(state["keyword"], wanted["lat"], wanted["lon"], wanted["radius_km"],
-                                                    band=band)
+        status, listings, full = self._point_session().search(state["keyword"], wanted["lat"], wanted["lon"],
+                                                              wanted["radius_km"], band=band)
         if status != "ok":
             state["bands"].insert(0, band)
             state["more_left"] += 1
@@ -149,8 +155,7 @@ class LiveSearch:
                    if r["item_id"] in fresh and r["item_id"] not in state["shown"]]
         state["shown"].update(r["item_id"] for r in matches)
         if full:
-            state["bands"] += self._split(band, [item["price"].get("amount") if isinstance(item.get("price"), dict)
-                                                 else None for item in listings])
+            state["bands"] += self._split(band, [_price(item).get("amount") for item in listings])
         yield {"type": "city", "city": state["area"], "status": status, "found": len(matches), "results": matches}
         yield {"type": "done", "total": len(matches), "search_id": search_id, "can_load_more": self._can_more(state)}
 
@@ -232,7 +237,7 @@ class LiveSearch:
             title = (item.get("title") or "").casefold()
             if words and not all(w in title for w in words):
                 continue
-            price = item["price"].get("amount") if isinstance(item.get("price"), dict) else None
+            price = _price(item).get("amount")
             if (min_price is not None or max_price is not None) and price is None:
                 continue
             if price is not None and ((min_price is not None and price < min_price) or
@@ -250,7 +255,7 @@ class LiveSearch:
                 continue
             out.append({
                 "item_id": item["item_id"], "title": scrub(item.get("title"), self._names),
-                "price": price, "price_text": item["price"].get("formatted") if isinstance(item.get("price"), dict) else None,
+                "price": price, "price_text": _price(item).get("formatted"),
                 "town": item.get("city"), "created_at": item.get("created_at"),
                 "photo": (item.get("images") or [None])[0], "permalink": item.get("permalink"),
                 "sold": item.get("sold"), "distance_km": distance,

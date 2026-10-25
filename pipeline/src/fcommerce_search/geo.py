@@ -55,7 +55,7 @@ def towns_named(name: str) -> list[City]:
 
 def find_town(name: str, country: str | None = None) -> City | None:
     """The most populous city with this name (in this country code, when given)."""
-    matches = [c for c in _load()[1].get(name.strip().casefold(), []) if not country or c.country == country]
+    matches = [c for c in towns_named(name) if not country or c.country == country]
     return max(matches, key=lambda c: c.population, default=None)
 
 
