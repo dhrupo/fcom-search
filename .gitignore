@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+pipeline/fcommerce-search.toml
+scrub_map.txt
+node_modules/
+web/.wrangler/
+web/.nuxt/
+web/.output/

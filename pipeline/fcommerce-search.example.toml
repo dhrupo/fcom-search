@@ -1,0 +1,3 @@
+# Copy to fcommerce-search.toml (git-ignored).
+# The crawler's own config; a relative path is relative to this file.
+crawler_config = "../../fcommerce-crawler/crawler.toml"
