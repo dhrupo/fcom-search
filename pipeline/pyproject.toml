@@ -5,6 +5,9 @@ description = "Turns fcommerce-crawler posts into searchable offers and pushes t
 requires-python = ">=3.12"
 dependencies = ["fcommerce-crawler @ git+https://github.com/dhrupo/fcommerce-crawler@f962281"]
 
+[project.scripts]
+fcommerce-search = "fcommerce_search.cli:main"
+
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
 

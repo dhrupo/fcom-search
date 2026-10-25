@@ -1,3 +1,7 @@
 # Copy to fcommerce-search.toml (git-ignored).
 # The crawler's own config; a relative path is relative to this file.
 crawler_config = "../../fcommerce-crawler/crawler.toml"
+
+[site]
+url = "http://127.0.0.1:8799"   # the local dev site; the live one is https://fcommerce-search.pages.dev
+# secret_file = "~/.config/fcommerce-search/push.env"   # holds FCS_PUSH_SECRET=...

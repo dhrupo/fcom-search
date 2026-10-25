@@ -11,10 +11,15 @@ class ConfigError(ValueError):
     pass
 
 
+DEFAULT_SECRET_FILE = Path.home() / ".config" / "fcommerce-search" / "push.env"
+
+
 @dataclass(frozen=True)
 class Config:
     crawler: CrawlerConfig
     crawler_data_dir: Path
+    site_url: str | None = None
+    secret_file: Path = DEFAULT_SECRET_FILE
 
 
 def load_config(path: Path) -> Config:
@@ -38,4 +43,8 @@ def load_config(path: Path) -> Config:
 
     # Same rule as the crawler CLI: a relative data_dir is relative to its crawler.toml.
     data_dir = crawler.data_dir if crawler.data_dir.is_absolute() else crawler_path.parent / crawler.data_dir
-    return Config(crawler=crawler, crawler_data_dir=data_dir)
+    site = raw.get("site") or {}
+    if not isinstance(site, dict):
+        raise ConfigError('site must be a table, e.g. [site] url = "https://fcommerce-search.pages.dev"')
+    secret_file = Path(site["secret_file"]).expanduser() if site.get("secret_file") else DEFAULT_SECRET_FILE
+    return Config(crawler=crawler, crawler_data_dir=data_dir, site_url=site.get("url"), secret_file=secret_file)
