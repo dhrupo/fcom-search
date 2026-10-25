@@ -1,0 +1,9 @@
+# Copy to fcommerce-search.toml (git-ignored).
+# The crawler's own config; a relative path is relative to this file.
+crawler_config = "../../fcommerce-crawler/crawler.toml"
+# The pipeline's own memory (offers, their ids, what the site has); relative to this file.
+state_db = "data/fcommerce-search.sqlite3"
+
+[site]
+url = "http://127.0.0.1:8799"   # local dev site; anything else must be https://
+# secret_file = "~/.config/fcommerce-search/push.env"   # holds FCS_PUSH_SECRET=...

@@ -1,0 +1,26 @@
+[project]
+name = "fcommerce-search"
+version = "0.1.0"
+description = "Turns fcommerce-crawler posts into searchable offers and pushes them to the fcommerce-search site"
+requires-python = ">=3.12"
+dependencies = ["fcommerce-crawler @ git+https://github.com/dhrupo/fcommerce-crawler@f962281"]
+
+[project.scripts]
+fcommerce-search = "fcommerce_search.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

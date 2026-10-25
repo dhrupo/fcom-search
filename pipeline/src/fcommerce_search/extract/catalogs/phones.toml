@@ -1,0 +1,56 @@
+# Canonical name = "<line> <model>". "bare" lets sellers drop the line word ("17 pro max"),
+# but only for models with 2+ words or a letter+digit word, so a lone "15" never matches.
+
+[words]
+"আইফোন" = "iphone"
+"প্রো" = "pro"
+"ম্যাক্স" = "max"
+"প্লাস" = "plus"
+"আল্ট্রা" = "ultra"
+"মিনি" = "mini"
+"স্যামসাং" = "samsung"
+"গ্যালাক্সি" = "galaxy"
+"পিক্সেল" = "pixel"
+"ফোল্ড" = "fold"
+"ফ্লিপ" = "flip"
+
+[[brand]]
+name = "Apple"
+line = "iPhone"
+bare = true
+models = [
+  "18 Pro Max", "18 Pro",
+  "17 Pro Max", "17 Pro", "17", "Air",
+  "16 Pro Max", "16 Pro", "16 Plus", "16", "16e",
+  "15 Pro Max", "15 Pro", "15 Plus", "15",
+  "14 Pro Max", "14 Pro", "14 Plus", "14",
+  "13 Pro Max", "13 Pro", "13 mini", "13",
+  "12 Pro Max", "12 Pro", "12 mini", "12",
+  "11 Pro Max", "11 Pro", "11",
+  "SE",
+]
+aliases = { "17 Air" = "Air" }
+
+[[brand]]
+name = "Samsung"
+line = "Galaxy"
+bare = true
+models = [
+  "S26 Ultra", "S26+", "S26",
+  "S25 Ultra", "S25+", "S25 Edge", "S25 FE", "S25",
+  "S24 Ultra", "S24+", "S24 FE", "S24",
+  "S23 Ultra", "S23+", "S23 FE", "S23",
+  "Z Fold 7", "Z Fold 6", "Z Fold 5",
+  "Z Flip 7", "Z Flip 6", "Z Flip 5",
+  "A57", "A56", "A55", "A37", "A36", "A35", "A27", "A26", "A25", "A17", "A16", "A15",
+]
+
+[[brand]]
+name = "Google"
+line = "Pixel"
+bare = false
+models = [
+  "10 Pro XL", "10 Pro Fold", "10 Pro", "10",
+  "9 Pro XL", "9 Pro Fold", "9 Pro", "9a", "9",
+  "8 Pro", "8a", "8",
+]

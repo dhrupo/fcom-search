@@ -1,0 +1,175 @@
+# Every post the PR 1a reviews used to break extraction, with its cautious expected answer.
+# offers = [[model, storage_gb, price], ...]; "" stands for unknown (None). Unsure means unknown.
+
+[[case]]
+text = "iPhone 15 Pro 256GB, 4K video, 8k zoom, price 1,20,000 tk"
+offers = [["iPhone 15 Pro", 256, 120000]]
+[[case]]
+text = "Galaxy S25 Ultra 16GB RAM 1TB 1,60,000tk"
+offers = [["Galaxy S25 Ultra", 1024, 160000]]
+ram = 16
+[[case]]
+text = "iPhone 13 128GB 55,000tk, delivery charge free"
+offers = [["iPhone 13", 128, 55000]]
+[[case]]
+text = "iPhone 15 Pro 256GB used\nPrice: 01711223344 (whatsapp)"
+offers = [["iPhone 15 Pro", 256, ""]]
+[[case]]
+text = "iPhone 15 Pro 256GB\nTk 85000,90000"
+offers = [["iPhone 15 Pro", 256, ""]]
+[[case]]
+text = "iPhone 13 128GB, A15 Bionic chip, 55k"
+offers = [["iPhone 13", 128, 55000]]
+[[case]]
+text = "iPhone 15 Pro 256GB A17 Pro chip, price 95k"
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "iPhone 14 Pro A16 Bionic 128GB price 95000tk"
+offers = [["iPhone 14 Pro", 128, 95000]]
+[[case]]
+text = "iPhone 15 Pro 256GB 1,20,000tk. Exchange your iPhone 11 accepted"
+offers = [["iPhone 15 Pro", 256, 120000]]
+[[case]]
+text = "iPhone 15 Pro 256GB 1,20,000tk, much better than iPhone 14 Pro"
+offers = [["iPhone 15 Pro", 256, 120000]]
+[[case]]
+text = "Exchange offer! Bring your old iPhone 11 and upgrade"
+offers = []
+[[case]]
+text = "iPhone 13 Pro 128GB price 85000tk exchange possible"
+offers = [["iPhone 13 Pro", 128, 85000]]
+[[case]]
+text = "iPhone 13 Pro Max 256GB 3 months old 90000tk"
+offers = [["iPhone 13 Pro Max", 256, 90000]]
+[[case]]
+text = "iPhone 13 Pro 128GB 85000tk, exchange hole 20000tk add korte hobe"
+offers = [["iPhone 13 Pro", 128, 85000]]
+[[case]]
+text = "iPhone 13 Pro 128GB 85000tk. Old price 95000tk"
+offers = [["iPhone 13 Pro", 128, 85000]]
+[[case]]
+text = "Selling iPhone 15 Pro 256GB 95k. Also have iPhone 13 128GB 55k"
+offers = [["iPhone 15 Pro", 256, 95000], ["iPhone 13", 128, 55000]]
+[[case]]
+text = "iPhone 13 128GB 85000tk. 14 Pro 256GB 120000tk"
+offers = [["iPhone 13", 128, 85000], ["iPhone 14 Pro", 256, 120000]]
+[[case]]
+text = "iPhone 13 and iPhone 14 available, inbox"
+offers = [["iPhone 13", "", ""], ["iPhone 14", "", ""]]
+[[case]]
+text = "iPhone 13 and iPhone 14 128GB 85000tk"
+offers = [["iPhone 13", "", ""], ["iPhone 14", "", ""]]
+[[case]]
+text = "iPhone 15 Pro Max original silicone case with MagSafe 4,500tk"
+offers = []
+[[case]]
+text = "iPhone 13 Pro Max case 1200tk"
+offers = []
+[[case]]
+text = "iPhone 15 Pro Max camera lens 1500tk"
+offers = []
+[[case]]
+text = "iPhone 15 Pro Max screen glass 1200tk"
+offers = []
+[[case]]
+text = "iPhone 15 cover with case 800tk"
+offers = []
+[[case]]
+text = "iPhone 13 Pro 128GB with original charger, 72k"
+offers = [["iPhone 13 Pro", 128, 72000]]
+[[case]]
+text = "iPhone 13 Pro full box with charger, price 85000tk"
+offers = [["iPhone 13 Pro", "", 85000]]
+[[case]]
+text = "iPhone 15 Pro 85000tk with silicone case"
+offers = [["iPhone 15 Pro", "", 85000]]
+[[case]]
+text = "iPhone 15 Pro 256GB price 95k"
+replies = ["2k kom hobe na bhai"]
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "iPhone 15 Pro 256GB price 95k"
+replies = ["5k kom hobe"]
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "iPhone 15 Pro 256GB 95k. Shop open 10am-11pm"
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "Samsung original charger 1,500tk. Shop open till 12 pm"
+offers = []
+[[case]]
+text = "Samsung Galaxy S23 128GB 60000tk. Shop closes at 11 pm"
+offers = [["Galaxy S23", 128, 60000]]
+[[case]]
+text = "iPhone 15 128GB 85000tk. Delivery by 12pm"
+offers = [["iPhone 15", 128, 85000]]
+[[case]]
+text = "iPhone 13 pm 256gb 90000tk"
+offers = [["iPhone 13 Pro Max", 256, 90000]]
+[[case]]
+text = "17pm 256gb 1,60,000tk"
+offers = [["iPhone 17 Pro Max", 256, 160000]]
+[[case]]
+text = "Galaxy S25 Ultra 16+512 1,40,000tk"
+offers = [["Galaxy S25 Ultra", 512, 140000]]
+ram = 16
+[[case]]
+text = "Samsung Galaxy S23+ 8/256 price 85000tk"
+offers = [["Galaxy S23+", 256, 85000]]
+ram = 8
+[[case]]
+text = "iPhone 15 + 256GB 1,05,000tk"
+offers = [["iPhone 15 Plus", 256, 105000]]
+[[case]]
+text = "Pixel 10 Pro 16GB 256GB 1,05,000tk"
+offers = [["Pixel 10 Pro", 256, 105000]]
+ram = 16
+[[case]]
+text = "iPhone 15 Pro 256GB 95k, offer till 10/16"
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "iPhone 15 Pro 256GB 95k, 2 TB icloud backup free"
+offers = [["iPhone 15 Pro", 256, 95000]]
+[[case]]
+text = "iPhone 15 Pro 256GB battery 2k cycle\nprice inbox"
+offers = [["iPhone 15 Pro", 256, ""]]
+[[case]]
+text = "iPhone 13 Pro 128GB price 1.2 lakh"
+offers = [["iPhone 13 Pro", 128, 120000]]
+[[case]]
+text = "iPhone 13 Pro 128GB 1,25,000"
+offers = [["iPhone 13 Pro", 128, 125000]]
+[[case]]
+text = "iPhone 15 Pro 48MP camera 4K. price 95k"
+offers = [["iPhone 15 Pro", "", 95000]]
+[[case]]
+text = "iPhone 13 Pro 128GB Price Tk. 85,000"
+offers = [["iPhone 13 Pro", 128, 85000]]
+[[case]]
+text = "iPhone 13 Pro 128GB Price BDT. 85,000"
+offers = [["iPhone 13 Pro", 128, 85000]]
+[[case]]
+text = "iPhone 15 Pro 256GB non-official 95k"
+offers = [["iPhone 15 Pro", 256, 95000]]
+region = ""
+[[case]]
+text = "iPhone 13 128GB like new condition 55k"
+offers = [["iPhone 13", 128, 55000]]
+condition = "used"
+[[case]]
+text = "iPhone 13 128GB display intact battery 88% 55k"
+offers = [["iPhone 13", 128, 55000]]
+condition = ""
+[[case]]
+text = "All UK version, brand new\niPhone 15\n128GB ---- 90,000tk\n256GB ---- 1,00,000tk"
+offers = [["iPhone 15", 128, 90000], ["iPhone 15", 256, 100000]]
+region = "UK"
+[[case]]
+text = "iPhone 15 128GB 85000tk. Open 9-11pm"
+offers = [["iPhone 15", 128, 85000]]
+[[case]]
+text = "iPhone 15 128GB 85000tk. Open from 10pm"
+offers = [["iPhone 15", 128, 85000]]
+[[case]]
+text = "iPhone 14 + 128 gb 95k"
+offers = [["iPhone 14 Plus", 128, 95000]]
