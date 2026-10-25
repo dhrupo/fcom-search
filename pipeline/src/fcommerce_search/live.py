@@ -67,14 +67,14 @@ class LiveSearch:
             slug = self.places.slug(city.name)
             # One crawl per city and keyword at a time; identical searches wait and then read the pool.
             with self._lock(f"{slug}|{keyword.casefold()}"):
-                status, found = "ok", 0
+                status = "ok"
                 if not self._fresh(slug, keyword):
                     transport = transport or self._transport_for_search()
-                    status, found = self._fetch(transport, city, slug, keyword)
+                    status = self._fetch(transport, city, slug, keyword)
             matches = [r for r in self._pool(slug, keyword, **wanted) if r["item_id"] not in shown]
             shown.update(r["item_id"] for r in matches)
             total += len(matches)
-            yield {"type": "city", "city": city.name, "status": status, "found": found, "results": matches}
+            yield {"type": "city", "city": city.name, "status": status, "found": len(matches), "results": matches}
         yield {"type": "done", "total": total}
 
     def _fresh(self, slug: str, keyword: str) -> bool:
@@ -82,20 +82,20 @@ class LiveSearch:
             row = db.execute("SELECT at FROM fetches WHERE key = ?", (f"{slug}|{keyword.casefold()}",)).fetchone()
         return bool(row) and self._now() - row[0] < FRESH_SECONDS
 
-    def _fetch(self, transport, city: City, slug: str, keyword: str) -> tuple[str, int]:
+    def _fetch(self, transport, city: City, slug: str, keyword: str) -> str:
         url = f"https://www.facebook.com/marketplace/{slug}/search?query={quote(keyword)}"
         try:
             response = transport.get(url, headers={"accept-language": "en-US,en;q=0.9"})
         except HostBlocked:
-            return "blocked", 0
+            return "blocked"
         except DROPS:
-            return "failed", 0
+            return "failed"
         if not urlsplit(str(response.url)).path.startswith(f"/marketplace/{slug}/"):
             self.places.remember_slug(city.name, city.country, works=False)
-            return "no_address", 0
+            return "no_address"
         outcome = classify(response)
         if outcome is not Outcome.OK:
-            return STATUS.get(outcome, "failed"), 0
+            return STATUS.get(outcome, "failed")
         outcome, listings = parse_search(response.text)
         self.places.remember_slug(city.name, city.country, works=True)
         now = self._now()
@@ -104,7 +104,7 @@ class LiveSearch:
                 db.execute("INSERT OR REPLACE INTO listings (item_id, city, data, fetched_at) VALUES (?, ?, ?, ?)",
                            (item["item_id"], slug, json.dumps(item, ensure_ascii=False), now))
             db.execute("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)", (f"{slug}|{keyword.casefold()}", now))
-        return STATUS.get(outcome, "failed"), len(listings)
+        return STATUS.get(outcome, "failed")
 
     def _town_point(self, town: str | None):
         if not town:

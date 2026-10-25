@@ -39,7 +39,8 @@ def test_events_stream_per_city(tmp_path):
     assert [e["type"] for e in events] == ["start", "city", "done"]
     assert events[0]["cities"] == ["Sylhet"]
     city = events[1]
-    assert (city["city"], city["status"], city["found"]) == ("Sylhet", "ok", 24)
+    # found counts the listings shown: 24 fetched, 22 of them inside 10 km.
+    assert (city["city"], city["status"], city["found"]) == ("Sylhet", "ok", 22)
     first = city["results"][0]
     assert set(first) >= {"item_id", "title", "price", "price_text", "town", "created_at", "photo", "permalink", "distance_km"}
     assert first["permalink"].startswith("https://www.facebook.com/marketplace/item/")
