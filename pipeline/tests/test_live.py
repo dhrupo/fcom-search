@@ -23,11 +23,11 @@ def photon(url):
                                      "geometry": {"coordinates": hit}}] if hit else []})
 
 
-def search(tmp_path, transport="replay", names=()):
+def search(tmp_path, transport="replay", names=(), point=False):
     config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=tmp_path, state_db=tmp_path / "state.sqlite3")
     places = Places(config.state_db, fetch=photon, clock=lambda: NOW, sleep=lambda s: None)
     transport = ReplayTransport() if transport == "replay" else transport
-    return LiveSearch(config, places, transport=transport, now=lambda: NOW, names=names)
+    return LiveSearch(config, places, transport=transport, now=lambda: NOW, names=names, point_search=point)
 
 
 def results(events):
@@ -133,3 +133,82 @@ def test_network_drop_and_cooldown_are_reported(tmp_path):
     for error, status in ((HostBlocked("facebook.com", 0), "blocked"), (DROPS[0]("reset"), "failed")):
         events = list(search(tmp_path / status, Failing(error)).run("iphone", *SYLHET, radius_km=10))
         assert [e["status"] for e in events if e["type"] == "city"] == [status]
+
+
+class Clock:
+    def __init__(self):
+        self.now = NOW
+
+    def __call__(self):
+        return self.now
+
+
+def test_point_search_is_one_request(tmp_path):
+    transport = ReplayTransport()
+    events = list(search(tmp_path, transport, point=True).run("iphone", *SYLHET, radius_km=40))
+    assert [e["type"] for e in events] == ["start", "city", "done"]
+    assert (len(transport.urls), len(transport.posts)) == (1, 1)
+    assert events[0]["mode"] == "point" and events[-1]["search_id"] and events[-1]["can_load_more"] is True
+    assert events[1]["found"] == len(events[1]["results"]) > 0
+
+
+def test_falls_back_to_city_addresses(tmp_path):
+    events = list(search(tmp_path, ReplayTransport(graphql_status=500), point=True).run("iphone", *SYLHET, radius_km=10))
+    assert events[0] == {"type": "mode", "mode": "basic"}
+    assert [(e["city"], e["status"]) for e in events if e["type"] == "city"] == [("Sylhet", "ok")]
+    assert events[-1]["type"] == "done" and events[-1].get("can_load_more") is False
+
+
+def test_load_more_fetches_new_band_without_repeats(tmp_path):
+    transport = ReplayTransport()
+    s = search(tmp_path, transport, point=True)
+    first = list(s.run("iphone", *SYLHET, radius_km=40))
+    shown = {r["item_id"] for r in results(first)}
+    more = list(s.more(first[-1]["search_id"]))
+    new = results(more)
+    band = json.loads(transport.posts[-1]["form"]["variables"])["params"]["browse_request_params"]
+    assert band["filter_price_upper_bound"] < 214748364700
+    assert new and not {r["item_id"] for r in new} & shown
+    assert more[-1]["type"] == "done" and more[-1]["total"] == len(new)
+
+
+def test_load_more_keeps_the_users_price_range(tmp_path):
+    s = search(tmp_path, point=True)
+    first = list(s.run("iphone", *SYLHET, radius_km=40, min_price=50_000, max_price=80_000))
+    more = list(s.more(first[-1]["search_id"]))
+    assert all(50_000 <= r["price"] <= 80_000 for r in results(first) + results(more))
+
+
+def test_load_more_stops_after_five(tmp_path):
+    transport = ReplayTransport()
+    s = search(tmp_path, transport, point=True)
+    search_id = list(s.run("iphone", *SYLHET, radius_km=40))[-1]["search_id"]
+    dones = [list(s.more(search_id))[-1] for _ in range(6)]
+    assert [d["can_load_more"] for d in dones] == [True, True, True, True, False, False]
+    assert len(transport.posts) == 1 + 5
+
+
+def test_unknown_or_expired_search_id(tmp_path):
+    clock = Clock()
+    s = search(tmp_path, point=True)
+    s._now = clock
+    search_id = list(s.run("iphone", *SYLHET, radius_km=40))[-1]["search_id"]
+    assert list(s.more("not-a-search")) == [{"type": "error", "error": "this search has expired; search again"}]
+    clock.now += 31 * 60
+    assert next(iter(s.more(search_id)))["type"] == "error"
+
+
+def test_searches_table_is_bounded(tmp_path):
+    s = search(tmp_path, point=True)
+    for i in range(130):
+        list(s.run(f"phone {i}", *SYLHET, radius_km=40))
+    assert len(s._searches) <= 100
+
+
+def test_new_price_range_fetches_again(tmp_path):
+    transport = ReplayTransport()
+    s = search(tmp_path, transport, point=True)
+    list(s.run("iphone", *SYLHET, radius_km=40))
+    list(s.run("iphone", *SYLHET, radius_km=40))
+    list(s.run("iphone", *SYLHET, radius_km=40, min_price=50_000, max_price=80_000))
+    assert len(transport.posts) == 2

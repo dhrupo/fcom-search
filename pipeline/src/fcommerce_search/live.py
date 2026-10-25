@@ -1,8 +1,11 @@
 import json
 import re
 import sqlite3
+import statistics
 import threading
 import time
+import uuid
+from collections import OrderedDict
 from urllib.parse import quote, urlsplit
 
 from crawler.facebook.marketplace import parse_search
@@ -10,10 +13,14 @@ from crawler.outcomes import Outcome, classify
 from crawler.transport import DROPS, HostBlocked, Transport
 
 from .config import Config
-from .geo import City, distance_km, find_town
+from .geo import City, big_cities_near, distance_km, find_town
+from .marketplace import PointSearch
 from .places import Places
 
 FRESH_SECONDS = 600
+SEARCH_SECONDS = 30 * 60
+MAX_SEARCHES = 100
+MAX_MORE = 5
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS listings (
     item_id TEXT PRIMARY KEY, city TEXT NOT NULL, data TEXT NOT NULL, fetched_at REAL NOT NULL);
@@ -36,8 +43,10 @@ def scrub(text: str, names=()) -> str:
 class LiveSearch:
     """Search Marketplace live, logged out, in the big cities around a point, and keep a local pool."""
 
-    def __init__(self, config: Config, places: Places, transport=None, now=time.time, names=()):
+    def __init__(self, config: Config, places: Places, transport=None, now=time.time, names=(), point_search=True):
         self.config, self.places, self._transport, self._now, self._names = config, places, transport, now, names
+        self._point_search, self._point = point_search, None
+        self._searches: OrderedDict[str, dict] = OrderedDict()
         self._locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
         with self._connect() as db:
@@ -54,8 +63,86 @@ class LiveSearch:
         with self._locks_guard:
             return self._locks.setdefault(key, threading.Lock())
 
-    def run(self, keyword: str, lat: float, lon: float, radius_km: float, **filters):
-        return self.run_cities(keyword, self.places.cities_to_search(lat, lon, radius_km), lat, lon, radius_km, **filters)
+    def run(self, keyword: str, lat: float, lon: float, radius_km: float, min_price=None, max_price=None, days=None):
+        """Search Facebook at the point; when that fails, search the nearby big cities by address."""
+        keyword = " ".join(keyword.split())[:100]
+        wanted = {"lat": lat, "lon": lon, "radius_km": radius_km, "min_price": min_price, "max_price": max_price,
+                  "days": days}
+        if self._point_search:
+            key = f"pt:{lat:.3f},{lon:.3f},{radius_km},{min_price},{max_price}"
+            with self._lock(f"{key}|{keyword.casefold()}"):
+                status, full = "ok", True
+                if not self._fresh(key, keyword):
+                    self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
+                    status, listings, full = self._point.search(keyword, lat, lon, radius_km, band=(min_price, max_price))
+                    if status == "ok":
+                        self._save(key, keyword, listings)
+            if status == "ok":
+                yield from self._point_events(key, keyword, wanted, (min_price, max_price), full)
+                return
+            yield {"type": "mode", "mode": "basic"}
+        cities = self.places.cities_to_search(lat, lon, radius_km)
+        yield from self.run_cities(keyword, cities, lat, lon, radius_km, min_price, max_price, days)
+
+    def _point_events(self, key, keyword, wanted, band, full):
+        near = big_cities_near(wanted["lat"], wanted["lon"], wanted["radius_km"], limit=1)
+        area = near[0].name if near else "this area"
+        matches = self._pool(key, keyword, match_words=False, **wanted)
+        search_id = uuid.uuid4().hex
+        state = {"keyword": keyword, "key": key, "wanted": wanted, "area": area, "bands": [], "more_left": MAX_MORE,
+                 "shown": {r["item_id"] for r in matches}, "at": self._now()}
+        if full:
+            state["bands"] = self._split(band, [r["price"] for r in matches])
+        self._searches[search_id] = state
+        while len(self._searches) > MAX_SEARCHES:
+            self._searches.popitem(last=False)
+        yield {"type": "start", "cities": [area], "mode": "point", "search_id": search_id}
+        yield {"type": "city", "city": area, "status": "ok", "found": len(matches), "results": matches}
+        yield {"type": "done", "total": len(matches), "search_id": search_id, "can_load_more": self._can_more(state)}
+
+    @staticmethod
+    def _can_more(state) -> bool:
+        return bool(state["bands"]) and state["more_left"] > 0
+
+    @staticmethod
+    def _split(band, prices) -> list:
+        """A band that came back full hides more listings: split it at its middle price."""
+        low, high = band
+        inside = [p for p in prices if p is not None and (low is None or p >= low) and (high is None or p <= high)]
+        if not inside:
+            return []
+        middle = statistics.median(inside)
+        if (low is not None and middle <= low) or (high is not None and middle >= high):
+            return []
+        return [(low or 0, middle), (middle, high)]
+
+    def more(self, search_id: str):
+        """The next price band of an earlier point search: up to MAX_MORE times, never repeating a listing."""
+        state = self._searches.get(search_id)
+        if not state or self._now() - state["at"] > SEARCH_SECONDS:
+            self._searches.pop(search_id, None)
+            yield {"type": "error", "error": "this search has expired; search again"}
+            return
+        if not self._can_more(state):
+            yield {"type": "done", "total": 0, "search_id": search_id, "can_load_more": False}
+            return
+        band = state["bands"].pop(0)
+        state["more_left"] -= 1
+        wanted = state["wanted"]
+        self._point = self._point or PointSearch(self._transport_for_search(), clock=self._now)
+        status, listings, full = self._point.search(state["keyword"], wanted["lat"], wanted["lon"], wanted["radius_km"],
+                                                    band=band)
+        if status == "ok":
+            self._save(state["key"], state["keyword"], listings, mark_fresh=False)
+        fresh = {item["item_id"] for item in listings}
+        matches = [r for r in self._pool(state["key"], state["keyword"], match_words=False, **wanted)
+                   if r["item_id"] in fresh and r["item_id"] not in state["shown"]]
+        state["shown"].update(r["item_id"] for r in matches)
+        if full:
+            state["bands"] += self._split(band, [item["price"].get("amount") if isinstance(item.get("price"), dict)
+                                                 else None for item in listings])
+        yield {"type": "city", "city": state["area"], "status": status, "found": len(matches), "results": matches}
+        yield {"type": "done", "total": len(matches), "search_id": search_id, "can_load_more": self._can_more(state)}
 
     def run_cities(self, keyword, cities: list[City], lat, lon, radius_km, min_price=None, max_price=None, days=None):
         keyword = " ".join(keyword.split())[:100]
@@ -75,7 +162,7 @@ class LiveSearch:
             shown.update(r["item_id"] for r in matches)
             total += len(matches)
             yield {"type": "city", "city": city.name, "status": status, "found": len(matches), "results": matches}
-        yield {"type": "done", "total": total}
+        yield {"type": "done", "total": total, "can_load_more": False}
 
     def _fresh(self, slug: str, keyword: str) -> bool:
         with self._connect() as db:
@@ -98,13 +185,17 @@ class LiveSearch:
             return STATUS.get(outcome, "failed")
         outcome, listings = parse_search(response.text)
         self.places.remember_slug(city.name, city.country, works=True)
+        self._save(slug, keyword, listings)
+        return STATUS.get(outcome, "failed")
+
+    def _save(self, key: str, keyword: str, listings: list[dict], mark_fresh: bool = True) -> None:
         now = self._now()
         with self._connect() as db:
             for item in listings:
                 db.execute("INSERT OR REPLACE INTO listings (item_id, city, data, fetched_at) VALUES (?, ?, ?, ?)",
-                           (item["item_id"], slug, json.dumps(item, ensure_ascii=False), now))
-            db.execute("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)", (f"{slug}|{keyword.casefold()}", now))
-        return STATUS.get(outcome, "failed")
+                           (item["item_id"], key, json.dumps(item, ensure_ascii=False), now))
+            if mark_fresh:
+                db.execute("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)", (f"{key}|{keyword.casefold()}", now))
 
     def _town_point(self, town: str | None):
         if not town:
@@ -116,8 +207,9 @@ class LiveSearch:
         found = self.places.suggest(town)
         return (found[0]["lat"], found[0]["lon"]) if found else None
 
-    def _pool(self, slug, keyword, lat, lon, radius_km, min_price, max_price, days):
-        words = [w for w in re.findall(r"\w+", keyword.casefold())]
+    def _pool(self, slug, keyword, lat, lon, radius_km, min_price, max_price, days, match_words=True):
+        # Facebook already matched point-search results to the keyword, sometimes without the exact words.
+        words = re.findall(r"\w+", keyword.casefold()) if match_words else []
         with self._connect() as db:
             rows = [json.loads(r[0]) for r in db.execute(
                 "SELECT data FROM listings WHERE city = ? ORDER BY fetched_at DESC", (slug,))]
