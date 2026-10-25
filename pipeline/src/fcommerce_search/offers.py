@@ -14,7 +14,7 @@ from .extract.rules import Offer, extract_offers
 OFFERS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS offers (
     offer_id TEXT PRIMARY KEY, payload TEXT NOT NULL, payload_hash TEXT NOT NULL, pushed_hash TEXT,
-    expired INTEGER NOT NULL DEFAULT 0, seen_run TEXT NOT NULL, updated_at REAL NOT NULL);
+    expired INTEGER NOT NULL DEFAULT 0, seen_run TEXT NOT NULL);
 """
 INBOX = re.compile(r"\binbox\b|ইনবক্স|\bmessenger\b", re.IGNORECASE)
 WRITE_WAIT_SECONDS = 30
@@ -60,7 +60,7 @@ def _read_offers(store: Store, cutoff: float):
             listing = price.get("amount") if source.kind == "fb_marketplace" and isinstance(price, dict) else None
             text = item.get("text") or item.get("title") or ""
             for offer in extract_offers(text, replies, listing_price=listing):
-                yield source, item, comments, replies, offer
+                yield source, item, text, comments, replies, offer
 
 
 def build_offers(config: Config, now=time.time) -> list[OfferRecord]:
@@ -69,15 +69,15 @@ def build_offers(config: Config, now=time.time) -> list[OfferRecord]:
         raise OffersError(f"no crawler.sqlite3 in {config.crawler_data_dir}: check crawler_config and its data_dir")
     store = Store(config.crawler_data_dir, clock=now)
     groups: dict[str, list] = {}
-    for source, item, comments, replies, offer in _read_offers(store, now() - HISTORY_DAYS * DAY):
+    for source, item, text, comments, replies, offer in _read_offers(store, now() - HISTORY_DAYS * DAY):
         rows = groups.setdefault(_fold_key(source, item, offer), [])
         if all(r[1]["item_id"] != item["item_id"] for r in rows):
-            rows.append((source, item, comments, replies, offer))
+            rows.append((source, item, text, comments, replies, offer))
 
     records = []
     for offer_id, rows in groups.items():
-        source, item, _, replies, offer = rows[0]  # items_for() lists newest first
-        comments = [c for r in rows for c in r[2]]
+        source, item, text, _, replies, offer = rows[0]  # items_for() lists newest first
+        comments = [c for r in rows for c in r[3]]
         times = [c["created_at"] for c in comments if c.get("created_at") is not None]
         if offer.price_source == "seller_reply":
             seller_reply = "price"
@@ -86,16 +86,16 @@ def build_offers(config: Config, now=time.time) -> list[OfferRecord]:
         records.append(OfferRecord(
             offer_id=offer_id, source=source, offer=offer,
             posts=tuple({"permalink": r[1].get("permalink"), "created_at": r[1].get("created_at")} for r in rows),
-            text=item.get("text") or item.get("title") or "",
+            text=text,
             sold=item.get("sold"), seller_reply=seller_reply,
             comment_count=sum(not c.get("is_owner") for c in comments),
             last_activity_at=max(times) if times else None,
         ))
-    _save(config, records, now())
+    _save(config, records)
     return records
 
 
-def _save(config: Config, records: list[OfferRecord], now: float) -> None:
+def _save(config: Config, records: list[OfferRecord]) -> None:
     run = uuid.uuid4().hex
     db = sqlite3.connect(config.crawler_data_dir / "crawler.sqlite3", timeout=WRITE_WAIT_SECONDS)
     try:
@@ -108,12 +108,12 @@ def _save(config: Config, records: list[OfferRecord], now: float) -> None:
             for record in records:
                 payload = json.dumps(serialize(record), ensure_ascii=False, sort_keys=True)
                 db.execute(
-                    "INSERT INTO offers (offer_id, payload, payload_hash, seen_run, updated_at) VALUES (?,?,?,?,?) "
+                    "INSERT INTO offers (offer_id, payload, payload_hash, seen_run) VALUES (?,?,?,?) "
                     "ON CONFLICT(offer_id) DO UPDATE SET payload=excluded.payload, payload_hash=excluded.payload_hash, "
-                    "expired=0, seen_run=excluded.seen_run, updated_at=excluded.updated_at",
-                    (record.offer_id, payload, hashlib.sha256(payload.encode()).hexdigest(), run, now),
+                    "expired=0, seen_run=excluded.seen_run",
+                    (record.offer_id, payload, hashlib.sha256(payload.encode()).hexdigest(), run),
                 )
-            db.execute("UPDATE offers SET expired = 1, updated_at = ? WHERE seen_run != ? AND expired = 0", (now, run))
+            db.execute("UPDATE offers SET expired = 1 WHERE seen_run != ? AND expired = 0", (run,))
     finally:
         db.close()
 

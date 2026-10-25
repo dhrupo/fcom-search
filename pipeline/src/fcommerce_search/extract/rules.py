@@ -68,11 +68,10 @@ def _storages(line: str) -> list[tuple[int, int | None]]:
         found.append((int(tb) * 1024, None))
     rams = set(re.findall(r"\b(\d{1,2})\s*gb\s*ram\b", line))
     ram_alone = int(next(iter(rams))) if len(rams) == 1 else None
-    unique = []
+    unique: dict[int, int | None] = {}
     for storage, ram in found:
-        if storage not in [s for s, _ in unique]:
-            unique.append((storage, ram if ram is not None else ram_alone))
-    return unique
+        unique.setdefault(storage, ram if ram is not None else ram_alone)
+    return list(unique.items())
 
 
 def _one(found: set[str]) -> str | None:
@@ -95,10 +94,9 @@ def _box(text: str) -> str | None:
                  if re.search(pattern, text)})
 
 
-def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = None,
-                   catalog: Catalog | None = None) -> list[Offer]:
+def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = None) -> list[Offer]:
     """Read a post (and the seller's replies) into offers; any fact not clearly stated stays None."""
-    catalog = catalog or _phones()
+    catalog = _phones()
     post = _clean(text)
     lines = post.splitlines()
     base = {"condition": _condition(post), "box": _box(post)}
