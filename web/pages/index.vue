@@ -18,6 +18,10 @@ const cities = ref<{ name: string; status: string; found: number }[]>([]);
 const results = ref<Listing[]>([]);
 const phase = ref<"idle" | "searching" | "done" | "error">("idle");
 const locating = ref(false);
+const searchId = ref<string | null>(null);
+const canLoadMore = ref(false);
+const basicMode = ref(false);
+const loadingMore = ref(false);
 
 const label = (p: Place) => [p.name, p.country].filter(Boolean).join(", ");
 
@@ -64,11 +68,27 @@ function useMyLocation() {
 const amount = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^\d.]/g, "")));
 let searchAbort: AbortController | undefined;
 
+async function readEvents(res: Response) {
+  if (!res.ok || !res.body) throw new Error(String(res.status));
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines.filter(Boolean)) handle(JSON.parse(line));
+    if (done) break;
+  }
+}
+
 async function search() {
   if (!keyword.value.trim() || !place.value) return;
   searchAbort?.abort();
   const abort = (searchAbort = new AbortController());
   cities.value = []; results.value = []; phase.value = "searching";
+  searchId.value = null; canLoadMore.value = false; basicMode.value = false;
   try {
     const res = await fetch("/api/search", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
@@ -76,32 +96,45 @@ async function search() {
         radius_km: Math.min(100, Math.max(10, Number(radius.value) || 40)), min_price: amount(minPrice.value),
         max_price: amount(maxPrice.value), days: days.value }),
     });
-    if (!res.ok || !res.body) throw new Error(String(res.status));
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      buffer += decoder.decode(value, { stream: !done });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines.filter(Boolean)) handle(JSON.parse(line));
-      if (done) break;
-    }
+    await readEvents(res);
     if (abort === searchAbort && phase.value === "searching") throw new Error("stream ended early");
   } catch (e) {
     if (abort === searchAbort) phase.value = "error";
   }
 }
 
+async function loadMore() {
+  if (!searchId.value || loadingMore.value) return;
+  loadingMore.value = true;
+  phase.value = "searching";
+  const abort = searchAbort;
+  try {
+    await readEvents(await fetch("/api/more", {
+      method: "POST", headers: { "Content-Type": "application/json" }, signal: abort?.signal,
+      body: JSON.stringify({ search_id: searchId.value }),
+    }));
+    if (phase.value === "searching") throw new Error("stream ended early");
+  } catch {
+    if (abort === searchAbort) phase.value = "error";
+  } finally {
+    loadingMore.value = false;
+  }
+}
+
 function handle(event: any) {
+  if (event.type === "mode") basicMode.value = event.mode === "basic";
   if (event.type === "start") cities.value = event.cities.map((name: string) => ({ name, status: "searching", found: 0 }));
   if (event.type === "city") {
     const city = cities.value.find((c) => c.name === event.city);
-    if (city) Object.assign(city, { status: event.status, found: event.found });
+    if (city) Object.assign(city, { status: event.status, found: (loadingMore.value ? city.found : 0) + event.found });
     results.value.push(...event.results);
   }
-  if (event.type === "done") phase.value = "done";
+  if (event.type === "done") {
+    phase.value = "done";
+    searchId.value = event.search_id ?? searchId.value;
+    canLoadMore.value = Boolean(event.can_load_more);
+  }
+  if (event.type === "error") { phase.value = "error"; canLoadMore.value = false; }
 }
 
 const summary = computed(() => {
@@ -171,6 +204,9 @@ const summary = computed(() => {
     <p v-if="phase === 'error'" role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
       Search failed. Please check the place and try again.
     </p>
+    <p v-if="basicMode" class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+      Facebook's map search is not answering right now, so this is basic mode: we searched the big cities nearby by name.
+    </p>
     <p role="status" class="mt-6 text-sm text-stone-600">{{ summary }}</p>
     <ul v-if="cities.length" aria-label="Cities" class="mt-2 flex flex-wrap gap-2 text-sm">
       <li v-for="c in cities" :key="c.name" class="rounded-full border border-stone-200 bg-white px-3 py-1">
@@ -194,7 +230,13 @@ const summary = computed(() => {
         </div>
       </li>
     </ul>
-    <p v-else-if="phase === 'done'" class="mt-10 text-center text-stone-500">
+    <div v-if="canLoadMore && results.length" class="mt-6 flex justify-center">
+      <button type="button" :disabled="loadingMore" @click="loadMore"
+              class="rounded-lg border border-teal-700 px-6 py-2.5 font-medium text-teal-800 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-700/30 disabled:opacity-60">
+        {{ loadingMore ? "Loading…" : "Load more" }}
+      </button>
+    </div>
+    <p v-if="!results.length && phase === 'done'" class="mt-10 text-center text-stone-500">
       No listings match. Try a wider radius, fewer words or no price limits.
     </p>
   </div>

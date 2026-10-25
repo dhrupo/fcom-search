@@ -1,4 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { BASIC_PORT } from "../playwright.config";
+
+const BASIC = `http://127.0.0.1:${BASIC_PORT}/`;
 
 async function pickPlace(page: Page, typed: string, option: RegExp) {
   await page.getByLabel("Place").fill(typed);
@@ -15,9 +18,9 @@ test("type_pick_place_filter_and_see_cards", async ({ page }) => {
   await page.getByLabel("Posted within").selectOption({ label: "Last 7 days" });
   await page.getByRole("button", { name: "Search" }).click();
 
-  await expect(page.getByRole("status")).toContainText("Done: 1 city, 9 results");
+  await expect(page.getByRole("status")).toContainText("Done: 1 city, 8 results");
   const cards = page.getByRole("listitem").filter({ has: page.getByRole("link", { name: "Open on Facebook" }) });
-  await expect(cards).toHaveCount(9);
+  await expect(cards).toHaveCount(8);
   for (const price of await cards.getByTestId("price").allTextContents()) {
     const amount = Number(price.replace(/\D/g, ""));
     expect(amount).toBeGreaterThanOrEqual(10000);
@@ -36,11 +39,11 @@ test("near_me_with_radius", async ({ page, context }) => {
   await expect(page.getByLabel("Place")).toHaveValue(/Sylhet/);
   await page.getByLabel("Radius").fill("10");
   await page.getByRole("button", { name: "Search" }).click();
-  await expect(page.getByRole("status")).toContainText("Done: 1 city, 22 results");
+  await expect(page.getByRole("status")).toContainText("Done: 1 city, 23 results");
 });
 
-test("progress_shows_each_city", async ({ page }) => {
-  await page.goto("/");
+test("basic_mode_searches_city_by_city", async ({ page }) => {
+  await page.goto(BASIC);
   await page.getByLabel("What are you looking for?").fill("iphone");
   await pickPlace(page, "sylh", /Sylhet/);
   await page.getByLabel("Radius").fill("100");
@@ -123,7 +126,36 @@ test("repeat_search_counts_what_it_shows", async ({ page }) => {
   await page.getByLabel("Radius").fill("10");
   for (let i = 0; i < 2; i++) {
     await page.getByRole("button", { name: "Search" }).click();
-    await expect(page.getByRole("status")).toContainText("Done: 1 city, 22 results");
-    await expect(page.getByRole("list", { name: "Cities" })).toContainText("Sylhet: 22 found");
+    await expect(page.getByRole("status")).toContainText("Done: 1 city, 23 results");
+    await expect(page.getByRole("list", { name: "Cities" })).toContainText("Sylhet: 23 found");
   }
+});
+
+
+test("load_more_adds_new_cards", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  const cards = page.getByRole("list", { name: "Results" }).getByRole("listitem");
+  await expect(page.getByRole("status")).toContainText("Done: 1 city, 23 results");
+  const loadMore = page.getByRole("button", { name: "Load more" });
+  for (let click = 0; click < 3 && (await cards.count()) === 23; click++) {
+    await loadMore.click();
+    await expect(page.getByRole("status")).toContainText(/Done/);
+  }
+  const after = await cards.count();
+  expect(after).toBeGreaterThan(23);
+  const links = await cards.getByRole("link", { name: "Open on Facebook" }).evaluateAll((a) => a.map((x) => x.getAttribute("href")));
+  expect(new Set(links).size).toBe(links.length);
+});
+
+test("basic_mode_notice", async ({ page }) => {
+  await page.goto(BASIC);
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByText(/basic mode/i)).toBeVisible();
+  await expect(page.getByRole("status")).toContainText("Done:");
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 });

@@ -1,5 +1,6 @@
 import json
 import mimetypes
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
@@ -36,6 +37,15 @@ def parse_search(body: object) -> dict:
         raise BadRequest("days")
     out["days"] = body.get("days")
     return out
+
+
+def parse_more(body: object) -> str:
+    if not isinstance(body, dict) or set(body) != {"search_id"}:
+        raise BadRequest("body")
+    search_id = body["search_id"]
+    if not isinstance(search_id, str) or not re.fullmatch(r"[0-9a-f]{32}", search_id):
+        raise BadRequest("search_id")
+    return search_id
 
 
 def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host: str = "127.0.0.1"):
@@ -93,7 +103,8 @@ def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host
         def do_POST(self):
             if not self._allowed():
                 return self._json(403, {"error": "forbidden"})
-            if urlsplit(self.path).path != "/api/search":
+            path = urlsplit(self.path).path
+            if path not in ("/api/search", "/api/more"):
                 return self._json(404, {"error": "not found"})
             if self.headers.get_content_type() != "application/json":
                 return self._json(415, {"error": "send JSON"})
@@ -101,14 +112,19 @@ def make_server(port: int, live: LiveSearch, places: Places, web_dir: Path, host
             if length > MAX_BODY:
                 return self._json(413, {"error": "too large"})
             try:
-                search = parse_search(json.loads(self.rfile.read(length) or b"null"))
+                body = json.loads(self.rfile.read(length) or b"null")
+                if path == "/api/more":
+                    stream = live.more(parse_more(body))
+                else:
+                    search = parse_search(body)
+                    stream = live.run(search.pop("keyword"), search.pop("lat"), search.pop("lon"),
+                                      search.pop("radius_km"), **search)
             except (ValueError, BadRequest):
                 return self._json(400, {"error": "bad request"})
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
-            stream = live.run(search.pop("keyword"), search.pop("lat"), search.pop("lon"), search.pop("radius_km"), **search)
             try:
                 for event in stream:
                     self.wfile.write((json.dumps(event, ensure_ascii=False) + "\n").encode())

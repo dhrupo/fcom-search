@@ -21,6 +21,7 @@ PLACES = {
     "maulvi bazar": ("Maulvi Bazar", "Bangladesh", "BD", 91.7774, 24.4829),
     "chhatak": ("Chhatak", "Bangladesh", "BD", 91.6694, 25.0381),
     "lalabazar": ("Lalabazar", "Bangladesh", "BD", 91.83, 24.86),
+    "shaistaganj": ("Shaistaganj", "Bangladesh", "BD", 91.45, 24.2833),
 }
 
 
@@ -37,9 +38,11 @@ def photon(url: str) -> str:
 
 if __name__ == "__main__":
     port, web_dir = int(sys.argv[1]), Path(sys.argv[2])
+    basic = len(sys.argv) > 3 and sys.argv[3] == "basic"
     state = Path(tempfile.mkdtemp()) / "state.sqlite3"
     config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=state.parent, state_db=state)
     places = Places(state, fetch=photon, clock=lambda: NOW, sleep=lambda s: None)
-    server = make_server(port, LiveSearch(config, places, transport=ReplayTransport(), now=lambda: NOW), places, web_dir)
+    transport = ReplayTransport(graphql_status=500 if basic else 200)
+    server = make_server(port, LiveSearch(config, places, transport=transport, now=lambda: NOW), places, web_dir)
     print(f"replay server on {server.server_port}", flush=True)
     server.serve_forever()

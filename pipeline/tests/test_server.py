@@ -21,7 +21,7 @@ def server(tmp_path):
     (tmp_path / "secret.txt").write_text("do not serve")
     config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=tmp_path, state_db=tmp_path / "s.sqlite3")
     places = Places(config.state_db, fetch=photon, clock=lambda: NOW, sleep=lambda s: None)
-    live = LiveSearch(config, places, transport=ReplayTransport(), now=lambda: NOW)
+    live = LiveSearch(config, places, transport=ReplayTransport(), now=lambda: NOW, point_search=True)
     srv = make_server(0, live, places, web)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     yield srv.server_port
@@ -47,7 +47,7 @@ def test_streams_ndjson(server):
     events = [json.loads(line) for line in body.splitlines()]
     assert status == 200
     assert [e["type"] for e in events] == ["start", "city", "done"]
-    assert events[1]["results"]
+    assert events[1]["results"] and events[-1]["search_id"]
 
 
 def test_places_and_reverse(server):
@@ -87,3 +87,17 @@ def test_static_files_stay_inside_the_web_folder(server):
     for path in ("/../secret.txt", "/%2e%2e/secret.txt", "/..%2fsecret.txt"):
         status, body = call(server, "GET", path)
         assert "do not serve" not in body and status in (403, 404)
+
+
+def test_more_streams_and_checks_input(server):
+    origin = {"Origin": f"http://127.0.0.1:{server}"}
+    _, body = call(server, "POST", "/api/search", SEARCH, origin)
+    search_id = json.loads(body.splitlines()[-1])["search_id"]
+    status, body = call(server, "POST", "/api/more", {"search_id": search_id}, origin)
+    events = [json.loads(line) for line in body.splitlines()]
+    assert status == 200 and [e["type"] for e in events] == ["city", "done"]
+    for bad in ({"search_id": 5}, {"search_id": "x" * 100}, {"search_id": search_id, "extra": 1}, {}):
+        assert call(server, "POST", "/api/more", bad)[0] == 400
+    assert call(server, "POST", "/api/more", {"search_id": search_id}, {"Host": "evil.example"})[0] == 403
+    text = call(server, "POST", "/api/more", json.dumps({"search_id": search_id}).encode(), {"Content-Type": "text/plain"})
+    assert text[0] == 415

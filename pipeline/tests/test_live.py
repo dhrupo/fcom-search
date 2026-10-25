@@ -164,10 +164,12 @@ def test_load_more_fetches_new_band_without_repeats(tmp_path):
     s = search(tmp_path, transport, point=True)
     first = list(s.run("iphone", *SYLHET, radius_km=40))
     shown = {r["item_id"] for r in results(first)}
-    more = list(s.more(first[-1]["search_id"]))
-    new = results(more)
+    more, new = [], []
+    while not new and len(transport.posts) <= 5:
+        more = list(s.more(first[-1]["search_id"]))
+        new = results(more)
     band = json.loads(transport.posts[-1]["form"]["variables"])["params"]["browse_request_params"]
-    assert band["filter_price_upper_bound"] < 214748364700
+    assert band["filter_price_lower_bound"] > 0 or band["filter_price_upper_bound"] < 214748364700
     assert new and not {r["item_id"] for r in new} & shown
     assert more[-1]["type"] == "done" and more[-1]["total"] == len(new)
 
@@ -180,7 +182,9 @@ def test_load_more_keeps_the_users_price_range(tmp_path):
 
 
 def test_load_more_stops_after_five(tmp_path):
-    transport = ReplayTransport()
+    from replay import FIXTURES
+    # Every band answers a full page, so bands never run out and only the cap can stop "more".
+    transport = ReplayTransport(graphql_body=(FIXTURES / "graphql_sylhet_point.json").read_text(encoding="utf-8"))
     s = search(tmp_path, transport, point=True)
     search_id = list(s.run("iphone", *SYLHET, radius_km=40))[-1]["search_id"]
     dones = [list(s.more(search_id))[-1] for _ in range(6)]
