@@ -25,6 +25,8 @@ def site():
             calls.append({"path": self.path, "secret": self.headers.get("X-Ingest-Secret"), "body": body})
             status, payload = replies.pop(0) if replies else (200, {"ok": True})
             self.send_response(status)
+            if "location" in payload:
+                self.send_header("Location", payload["location"])
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(payload).encode())
@@ -44,7 +46,7 @@ def setup(tmp_path, url, secret=SECRET):
     if secret is not None:
         secret_file.write_text(f"FCS_PUSH_SECRET={secret}\n")
     config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=tmp_path,
-                    site_url=url, secret_file=secret_file)
+                    state_db=tmp_path / "state.sqlite3", site_url=url, secret_file=secret_file)
     shop = store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "phones", name="Shop")
     return store, shop, config
 
@@ -166,4 +168,63 @@ def test_dropped_connection_is_a_push_error(tmp_path):
     post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
     build_offers(config, now=lambda: NOW)
     with pytest.raises(PushError):
+        push_offers(config)
+
+
+def test_redirect_is_refused_and_the_secret_stays_home(tmp_path, site):
+    url, calls, replies = site
+    store, shop, config = setup(tmp_path, url)
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
+    build_offers(config, now=lambda: NOW)
+    replies.append((302, {"location": url.replace("127.0.0.1", "localhost") + "/elsewhere"}))
+    with pytest.raises(PushError, match="redirect"):
+        push_offers(config)
+    assert len(calls) == 1
+    assert push_offers(config).sent == 1
+
+
+def test_html_answer_is_reported_as_wrong_site(tmp_path):
+    class Html(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"<html>not the api</html>")
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Html)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    store, shop, config = setup(tmp_path, f"http://127.0.0.1:{server.server_port}")
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
+    build_offers(config, now=lambda: NOW)
+    with pytest.raises(PushError, match="not with JSON"):
+        push_offers(config)
+    server.shutdown()
+
+
+def test_unreadable_secret_file_says_why(tmp_path, site):
+    url, calls, _ = site
+    store, shop, config = setup(tmp_path, url)
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
+    build_offers(config, now=lambda: NOW)
+    config.secret_file.chmod(0)
+    try:
+        with pytest.raises(PushError, match="cannot read"):
+            push_offers(config)
+    finally:
+        config.secret_file.chmod(0o600)
+    assert calls == []
+
+
+def test_partial_failure_reports_what_was_sent(tmp_path, site, monkeypatch):
+    url, _, replies = site
+    monkeypatch.setattr("fcommerce_search.push.BATCH", 1)
+    store, shop, config = setup(tmp_path, url)
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
+    post(store, shop, "p2", "iPhone 15 128GB, 85k")
+    build_offers(config, now=lambda: NOW)
+    replies.extend([(200, {"ok": True}), (500, {})])
+    with pytest.raises(PushError, match="after sending 1"):
         push_offers(config)

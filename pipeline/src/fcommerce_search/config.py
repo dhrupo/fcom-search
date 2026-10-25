@@ -1,6 +1,7 @@
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from crawler.config import Config as CrawlerConfig
 from crawler.config import ConfigError as CrawlerConfigError
@@ -18,12 +19,20 @@ DEFAULT_SECRET_FILE = Path.home() / ".config" / "fcommerce-search" / "push.env"
 class Config:
     crawler: CrawlerConfig
     crawler_data_dir: Path
+    state_db: Path
     site_url: str | None = None
     secret_file: Path = DEFAULT_SECRET_FILE
 
 
+def _safe_site_url(url) -> bool:
+    if not isinstance(url, str):
+        return False
+    parts = urlsplit(url)
+    # The push secret travels in a header, so plain http is only for a site on this machine.
+    return parts.scheme == "https" or (parts.scheme == "http" and parts.hostname in ("127.0.0.1", "localhost"))
+
+
 def load_config(path: Path) -> Config:
-    path = Path(path)
     try:
         raw = tomllib.loads(path.read_text())
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as e:
@@ -47,7 +56,17 @@ def load_config(path: Path) -> Config:
     if not isinstance(site, dict):
         raise ConfigError('site must be a table, e.g. [site] url = "https://fcommerce-search.pages.dev"')
     url = site.get("url")
-    if url is not None and not (isinstance(url, str) and url.startswith(("http://", "https://"))):
-        raise ConfigError('site.url must start with http:// or https://, e.g. "https://fcommerce-search.pages.dev"')
+    if url is not None and not _safe_site_url(url):
+        raise ConfigError('site.url must be https://, or http:// only for 127.0.0.1/localhost, '
+                          'e.g. "https://fcommerce-search.pages.dev"')
+    if "secret_file" in site and not (isinstance(site["secret_file"], str) and site["secret_file"]):
+        raise ConfigError('site.secret_file must be a path, e.g. "~/.config/fcommerce-search/push.env"')
     secret_file = Path(site["secret_file"]).expanduser() if site.get("secret_file") else DEFAULT_SECRET_FILE
-    return Config(crawler=crawler, crawler_data_dir=data_dir, site_url=url, secret_file=secret_file)
+    state_db = raw.get("state_db", "data/fcommerce-search.sqlite3")
+    if not isinstance(state_db, str) or not state_db:
+        raise ConfigError('state_db must be a path, e.g. state_db = "data/fcommerce-search.sqlite3"')
+    state_db = Path(state_db).expanduser()
+    if not state_db.is_absolute():
+        state_db = path.parent / state_db
+    return Config(crawler=crawler, crawler_data_dir=data_dir, state_db=state_db, site_url=url,
+                  secret_file=secret_file)

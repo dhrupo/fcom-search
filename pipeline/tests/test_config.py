@@ -37,3 +37,29 @@ def test_site_url_needs_http_scheme(tmp_path, url):
     value = f'"{url}"' if isinstance(url, str) else url
     with pytest.raises(ConfigError, match="site.url"):
         load_config(write(tmp_path / "fcommerce-search.toml", f'crawler_config = "crawler.toml"\n[site]\nurl = {value}\n'))
+
+
+@pytest.mark.parametrize("url, ok", [("http://127.0.0.1:8799", True), ("http://localhost:8799", True),
+                                     ("https://fcommerce-search.pages.dev", True),
+                                     ("http://fcommerce-search.pages.dev", False)])
+def test_plain_http_only_for_this_machine(tmp_path, url, ok):
+    write(tmp_path / "crawler.toml", 'places = ["Sylhet"]\n')
+    path = write(tmp_path / "fcommerce-search.toml", f'crawler_config = "crawler.toml"\n[site]\nurl = "{url}"\n')
+    if ok:
+        assert load_config(path).site_url == url
+    else:
+        with pytest.raises(ConfigError, match="https"):
+            load_config(path)
+
+
+def test_secret_file_must_be_a_path(tmp_path):
+    write(tmp_path / "crawler.toml", 'places = ["Sylhet"]\n')
+    with pytest.raises(ConfigError, match="secret_file"):
+        load_config(write(tmp_path / "fcommerce-search.toml",
+                          'crawler_config = "crawler.toml"\n[site]\nsecret_file = 1\n'))
+
+
+def test_state_db_defaults_next_to_the_config(tmp_path):
+    write(tmp_path / "crawler.toml", 'places = ["Sylhet"]\n')
+    cfg = load_config(write(tmp_path / "fcs" / "fcommerce-search.toml", 'crawler_config = "../crawler.toml"\n'))
+    assert cfg.state_db == tmp_path / "fcs" / "data" / "fcommerce-search.sqlite3"
