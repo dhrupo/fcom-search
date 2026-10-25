@@ -40,9 +40,8 @@ def test_suggestions_are_cached_and_rate_limited(tmp_path):
     fetch, clock = FakeFetch(), FakeClock()
     p = places(tmp_path, fetch, clock)
     first = p.suggest("londo")
-    assert [(s["name"], s["country"], s["countrycode"]) for s in first] == [
-        ("London", "United Kingdom", "GB"), ("London", "Canada", "CA")]
-    assert first[0]["lat"] == 51.5073
+    named = [(s["name"], s["country"], s["countrycode"]) for s in first]
+    assert named[0] == ("London", "United Kingdom", "GB") and ("London", "Canada", "CA") in named
     assert p.suggest("LONDO ") == first and len(fetch.urls) == 1
     p.suggest("paris")
     assert len(fetch.urls) == 2 and clock.slept and clock.slept[-1] >= 0.99
@@ -58,8 +57,9 @@ def test_long_or_empty_query_is_not_sent(tmp_path):
 
 
 def test_bad_photon_answer_is_an_empty_list(tmp_path):
+    bundled_only = places(tmp_path / "ok", FakeFetch(body={"features": []})).suggest("london")
     for n, body in enumerate(({"unexpected": True}, ["a", "list"], {"features": "nope"})):
-        assert places(tmp_path / str(n), FakeFetch(body=body)).suggest("london") == []
+        assert places(tmp_path / str(n), FakeFetch(body=body)).suggest("london") == bundled_only
 
 
 def test_slug_that_redirects_is_remembered_as_bad(tmp_path):
@@ -84,3 +84,17 @@ def test_cities_with_a_bad_slug_are_skipped(tmp_path):
     p = places(tmp_path)
     p.remember_slug("Sylhet", "BD", works=False)
     assert "Sylhet" not in [c.name for c in p.cities_to_search(24.8949, 91.8687, radius_km=100)]
+
+
+def test_suggestions_rank_big_cities_first_and_add_bundled_matches(tmp_path):
+    photon_answer = {"features": [
+        {"properties": {"name": "Chittaguppa", "country": "India", "countrycode": "IN"}, "geometry": {"coordinates": [77.1, 17.8]}},
+        {"properties": {"name": "Chattogram", "country": "Bangladesh", "countrycode": "BD"}, "geometry": {"coordinates": [91.8, 22.3]}},
+    ]}
+    fetch = FakeFetch(photon_answer)
+    p = places(tmp_path, fetch)
+    assert [s["name"] for s in p.suggest("chittag")][:2] == ["Chattogram", "Chittaguppa"]
+    assert "osm_tag=place%3Acity" in fetch.urls[0] and "osm_tag=place%3Atown" in fetch.urls[0]
+
+    kuala = places(tmp_path / "k", FakeFetch({"features": []})).suggest("kuala")
+    assert (kuala[0]["name"], kuala[0]["country"], kuala[0]["countrycode"]) == ("Kuala Lumpur", "Malaysia", "MY")

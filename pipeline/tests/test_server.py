@@ -52,7 +52,9 @@ def test_streams_ndjson(server):
 
 def test_places_and_reverse(server):
     status, body = call(server, "GET", "/api/places?q=chhatak")
-    assert status == 200 and json.loads(body)[0]["lat"] == 25.0381
+    first = json.loads(body)[0]
+    assert status == 200 and Places.slug(first["name"]) == "chhatak" and round(first["lat"], 2) == 25.04
+    assert [Places.slug(p["name"]) for p in json.loads(body)].count("chhatak") == 1
     assert call(server, "GET", "/api/reverse?lat=91&lon=500")[0] == 400
 
 

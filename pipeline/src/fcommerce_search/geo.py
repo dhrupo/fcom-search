@@ -53,3 +53,21 @@ def find_town(name: str, country: str | None = None) -> City | None:
     """The most populous city with this name (in this country code, when given)."""
     matches = [c for c in _load()[1].get(name.strip().casefold(), []) if not country or c.country == country]
     return max(matches, key=lambda c: c.population, default=None)
+
+
+@cache
+def _countries() -> dict[str, str]:
+    text = resources.files("fcommerce_search").joinpath("geo", "countries.tsv").read_text(encoding="utf-8")
+    return dict(line.split("\t") for line in text.splitlines() if line and not line.startswith("#"))
+
+
+def country_name(code: str | None) -> str | None:
+    return _countries().get(code or "")
+
+
+def cities_by_prefix(prefix: str, limit: int = 4) -> list[City]:
+    """Bundled cities whose name starts with the prefix, most populous first."""
+    prefix = prefix.strip().casefold()
+    by_name = _load()[1]
+    found = {id(c): c for key, cities in by_name.items() if key.startswith(prefix) for c in cities}
+    return sorted(found.values(), key=lambda c: -c.population)[:limit]

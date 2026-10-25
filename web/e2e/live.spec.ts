@@ -98,10 +98,10 @@ test("fast_typing_in_place_box_shows_latest_suggestions", async ({ page }) => {
   await page.getByLabel("Place").fill("lond");
   await page.waitForRequest((r) => r.url().includes("/api/places?q=lond"));
   await page.getByLabel("Place").fill("pari");
-  await expect(page.getByRole("option", { name: /Paris/ })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Paris, France", exact: true })).toBeVisible();
   await slowLondon;
-  await expect(page.getByRole("option", { name: /Paris/ })).toBeVisible();
-  await expect(page.getByRole("option", { name: /London/ })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Paris, France", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: /^London,/ })).toHaveCount(0);
 });
 
 test("phone_layout_fits", async ({ page }) => {

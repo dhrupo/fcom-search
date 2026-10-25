@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from .geo import City, big_cities_near
+from .geo import City, big_cities_near, cities_by_prefix, country_name, find_town
 
 PHOTON = "https://photon.komoot.io"
 USER_AGENT = "fcommerce-search (local, personal use)"
@@ -39,7 +39,7 @@ class Places:
         return sqlite3.connect(self._db_path, timeout=30)
 
     def _photon(self, path: str, params: dict) -> dict:
-        key = path + "?" + urllib.parse.urlencode(sorted(params.items()))
+        key = path + "?" + urllib.parse.urlencode(sorted(params.items()), doseq=True)
         with self._connect() as db:
             row = db.execute("SELECT body FROM photon_cache WHERE key = ?", (key,)).fetchone()
         if row:
@@ -70,10 +70,21 @@ class Places:
         return out
 
     def suggest(self, query: str) -> list[dict]:
+        """Cities and towns for a typed name, the most populous first (villages are left out)."""
         q = " ".join(query.split()).casefold()[:100]
         if len(q) < 2:
             return []
-        return self._features(self._photon("/api/", {"q": q, "limit": 6, "lang": "en", "osm_tag": "place"}))
+        params = {"q": q, "limit": 6, "lang": "en", "osm_tag": ["place:city", "place:town"]}
+        bundled = [{"name": c.name, "country": country_name(c.country), "countrycode": c.country, "state": None,
+                    "lat": c.lat, "lon": c.lon, "population": c.population} for c in cities_by_prefix(q)]
+        found = self._features(self._photon("/api/", params))
+        for f in found:
+            town = find_town(f["name"], (f.get("countrycode") or "").upper() or None)
+            f["population"] = town.population if town else 0
+        merged = {}
+        for s in sorted(bundled + found, key=lambda s: -s["population"]):
+            merged.setdefault((self.slug(s["name"]), (s.get("countrycode") or "").upper()), s)
+        return [{k: v for k, v in s.items() if k != "population"} for s in merged.values()][:6]
 
     def reverse(self, lat: float, lon: float) -> dict | None:
         found = self._features(self._photon("/reverse", {"lat": round(lat, 3), "lon": round(lon, 3), "limit": 1}))
