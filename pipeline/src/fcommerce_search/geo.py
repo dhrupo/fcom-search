@@ -4,6 +4,7 @@ from functools import cache
 from importlib import resources
 
 BIG_CITY = 100_000
+SAME_AREA_KM = 25
 EARTH_KM = 6371.0
 
 
@@ -38,9 +39,14 @@ def distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def big_cities_near(lat: float, lon: float, radius_km: float, limit: int = 8) -> list[City]:
-    """Cities of 100,000+ people within the radius, nearest first."""
-    near = [(distance_km(lat, lon, c.lat, c.lon), c) for c in _load()[0] if c.population >= BIG_CITY]
-    return [c for d, c in sorted(near, key=lambda dc: dc[0]) if d <= radius_km][:limit]
+    """Cities of 100,000+ people within the radius, nearest first, without parts of a bigger city."""
+    inside = [c for c in _load()[0] if c.population >= BIG_CITY and distance_km(lat, lon, c.lat, c.lon) <= radius_km]
+    kept: list[City] = []
+    # A bigger city's Marketplace search already covers places this close (Dhaka covers Gulshan).
+    for city in sorted(inside, key=lambda c: -c.population):
+        if all(distance_km(city.lat, city.lon, k.lat, k.lon) > SAME_AREA_KM for k in kept):
+            kept.append(city)
+    return sorted(kept, key=lambda c: distance_km(lat, lon, c.lat, c.lon))[:limit]
 
 
 def find_town(name: str, country: str | None = None) -> City | None:

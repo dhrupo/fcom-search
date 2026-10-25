@@ -24,3 +24,10 @@ def test_town_name_resolves_with_country_hint():
     assert (london.country, round(london.lat)) == ("GB", 52)
     assert find_town("London", country="CA").country == "CA"
     assert find_town("Nowhereville Zzz") is None
+
+
+def test_parts_of_a_bigger_city_are_skipped():
+    assert [c.name for c in big_cities_near(23.7104, 90.4074, radius_km=10)] == ["Dhaka"]
+    assert [c.name for c in big_cities_near(51.5073, -0.1276, radius_km=10)] == ["London"]
+    near_sylhet = [c.name for c in big_cities_near(*SYLHET, radius_km=100)]
+    assert near_sylhet[0] == "Sylhet" and "Shillong" in near_sylhet
