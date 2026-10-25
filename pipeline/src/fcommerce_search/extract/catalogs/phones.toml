@@ -29,6 +29,7 @@ models = [
   "11 Pro Max", "11 Pro", "11",
   "SE",
 ]
+aliases = { "17 Air" = "Air" }
 
 [[brand]]
 name = "Samsung"

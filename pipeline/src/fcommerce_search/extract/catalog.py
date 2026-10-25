@@ -19,8 +19,9 @@ class Catalog:
         self._lines = [b["line"].lower() for b in raw["brand"]]
         sequences = {}
         for brand in raw["brand"]:
-            for name in brand["models"]:
-                found = PhoneModel(brand["name"], f"{brand['line']} {name}")
+            names = [(name, name) for name in brand["models"]] + list(brand.get("aliases", {}).items())
+            for name, canonical in names:
+                found = PhoneModel(brand["name"], f"{brand['line']} {canonical}")
                 tokens = tuple(self._tokens(name))
                 sequences[(brand["line"].lower(), *tokens)] = found
                 if brand["bare"] and (len(tokens) > 1 or re.fullmatch(r"[a-z]+\d+", tokens[0])):
@@ -46,7 +47,8 @@ class Catalog:
         while i < len(tokens):
             for seq, model in self._sequences:
                 if tuple(tokens[i:i + len(seq)]) == seq:
-                    if model not in found:
+                    # "iPhone 18 Pro Series" names a family of phones, not one offer.
+                    if model not in found and tokens[i + len(seq):i + len(seq) + 1] != ["series"]:
                         found.append(model)
                     i += len(seq)
                     break

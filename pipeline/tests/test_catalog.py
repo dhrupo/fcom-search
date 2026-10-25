@@ -29,7 +29,7 @@ def test_nickname_maps_to_canonical_model(phones, text, expected):
     assert names(phones.find_models(text)) == [expected]
 
 
-@pytest.mark.parametrize("text", ["iPhone 99 Ultra", "Samsung", "iphone", "১২ মাসের EMI"])
+@pytest.mark.parametrize("text", ["iPhone 99 Ultra", "Samsung", "iphone", "১২ মাসের EMI", "iPhone 18 Pro Series"])
 def test_unknown_model_stays_none(phones, text):
     assert phones.find_models(text) == []
 
