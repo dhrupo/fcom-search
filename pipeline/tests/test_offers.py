@@ -163,3 +163,13 @@ def test_comment_reads_do_not_grow_with_posts(tmp_path, monkeypatch):
         return len(reads)
 
     assert count(1) == count(4)
+
+
+def test_group_offer_carries_no_post_text(tmp_path):
+    store, config = setup(tmp_path)
+    group = store.add_source("https://www.facebook.com/groups/123", "fb_group", "Sylhet", "phones", name="Sylhet Phones")
+    post(store, group, "g1", "Selling my iPhone 13 Pro 128GB, 72k, call 01711000000", NOW - 3600, author_id=PRIVATE_ID)
+    [offer] = [serialize(r) for r in build_offers(config, now=lambda: NOW)]
+    assert (offer["seller"], offer["text"], offer["price"]) == ("Group member", None, 72000)
+    assert "01711000000" not in json.dumps(offer)
+    assert offer["posts"][0]["permalink"].endswith("/posts/g1")

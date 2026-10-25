@@ -143,5 +143,6 @@ def serialize(record: OfferRecord) -> dict:
         "updated_at": max(created) if created else None,
         "post_count": len(record.posts),
         "posts": list(record.posts),
-        "text": record.text,
+        # Group posters are private people: their own words can carry a phone number or name.
+        "text": None if source.kind == "fb_group" else record.text,
     }
