@@ -288,3 +288,21 @@ class _Counting:
 
     def close(self):
         self._db.close()
+
+
+def test_capitalised_phones_category_is_read(tmp_path):
+    store, config = setup(tmp_path)
+    post(store, store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "Phones", name="Shop"), "p1",
+         "iPhone 13 Pro 128GB, 72k")
+    assert [o["model"] for o in built(config)] == ["iPhone 13 Pro"]
+
+
+def test_two_groups_never_share_an_offer_id(tmp_path):
+    store, config = setup(tmp_path)
+    group = store.add_source("https://www.facebook.com/groups/123", "fb_group", "Sylhet", "phones", name="G")
+    post(store, group, "g1", "iPhone 13 Pro 128GB, 72k", NOW - 7200, author_id=PRIVATE_ID)
+    post(store, group, "g2", "iPhone 13 Pro 128GB, 71k", NOW - 3600, author_id=PRIVATE_ID)
+    [folded] = built(config)
+    post(store, group, "g2", "iPhone 13 Pro 128GB with box, 71k", NOW - 3600, author_id=PRIVATE_ID)
+    ids = [o["offer_id"] for o in built(config)]
+    assert len(ids) == 2 and len(set(ids)) == 2 and folded["offer_id"] in ids

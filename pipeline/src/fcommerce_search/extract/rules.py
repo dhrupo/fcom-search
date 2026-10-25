@@ -13,7 +13,7 @@ REGIONS = {
     "india": "India", "indian": "India", "hong kong": "Hong Kong", "official": "Official",
 }
 NOT_A_PRICE = re.compile(
-    r"\b(bonus|discount|cashback|off|save|trade|exchange|emi|delivery|charge|advance|booking|kom|less)\b|কম")
+    r"\b(bonus|discount|cashback|off|save|emi|delivery|charge|advance|booking|kom|less)\b|কম")
 NUMBER = r"(\d[\d,]*(?:\.\d+)?)"
 PRICES = [
     (re.compile(rf"(?:bdt|tk|taka|৳|টাকা)\s*[:.]?\s*{NUMBER}"), 1),
@@ -25,8 +25,10 @@ PRICES = [
     (re.compile(r"(?<![\d,])(\d{1,2},\d{2},\d{3})(?![\d,])"), 1),
 ]
 NOT_AN_OFFER = re.compile(r"\b(exchange|trade|old|than|vs|compare|difference)\b|এক্সচেঞ্জ|পুরোনো|পুরাতন")
-ACCESSORY = re.compile(r"\b(case|cover|glass|protector|charger|adapter|cable|skin|lens|airpods|earphones?)\b")
-CLAUSES = re.compile(r"(?<!\d)[.!?।](?!\d)|[;|\n]|,\s")
+# An accessory word right after "with", "and", "box"... lists what comes with a phone.
+ACCESSORY = re.compile(r"(?<!with )(?<!and )(?<!& )(?<!\+ )(?<!box )(?<!free )(?<!original )"
+                       r"\b(case|cover|tempered glass|protector|charger|adapter|cable|skin|airpods|earphones?)\b")
+CLAUSES = re.compile(r"(?<!\d)[.!?।](?!\d)(?!(?<=tk\.)\s*\d)|[;|\n]|,\s")
 
 
 @dataclass(frozen=True)
@@ -129,9 +131,12 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
     if len(table) >= 2:
         return table
 
-    clauses = [c for c in CLAUSES.split(post) if c.strip() and not NOT_AN_OFFER.search(c)]
+    clauses = [c for c in CLAUSES.split(post) if c.strip()]
     if _is_accessory(post):
         return []
+    if len(catalog.find_models(post)) > 1:
+        # Only with several models: "Exchange your iPhone 11" next to the phone on sale is not an offer.
+        clauses = [c for c in clauses if not NOT_AN_OFFER.search(c)]
     models = catalog.find_models("\n".join(clauses))
     if len(models) > 1:
         return _one_offer_per_clause(catalog, clauses, base, post_region)
@@ -158,7 +163,10 @@ def _one_offer_per_clause(catalog: Catalog, clauses: list[str], base: dict, regi
     offers = []
     for clause in clauses:
         models = catalog.find_models(clause)
-        if len(models) != 1:
+        if len(models) > 1:
+            offers += [Offer(m.brand, m.model, region=region, **base) for m in models]
+            continue
+        if not models:
             continue
         storages, prices = _storages(clause) or [(None, None)], _prices(clause)
         price = prices[0] if len(prices) == 1 and len(storages) == 1 else None

@@ -163,3 +163,33 @@ def test_lakh_prices_and_camera_4k():
     assert offers_of("iPhone 13 Pro 128GB price 1.2 lakh") == [("iPhone 13 Pro", 128, 120000)]
     assert offers_of("iPhone 13 Pro 128GB 1,25,000") == [("iPhone 13 Pro", 128, 125000)]
     assert offers_of("iPhone 15 Pro 48MP camera 4K. price 95k") == [("iPhone 15 Pro", None, 95000)]
+
+
+def test_single_phone_post_keeps_exchange_and_age_notes():
+    assert offers_of("iPhone 13 Pro 128GB price 85000tk exchange possible") == [("iPhone 13 Pro", 128, 85000)]
+    assert offers_of("iPhone 13 Pro Max 256GB 3 months old 90000tk") == [("iPhone 13 Pro Max", 256, 90000)]
+
+
+def test_phone_listing_its_included_accessories_is_a_phone():
+    assert offers_of("iPhone 13 Pro full box with charger, price 85000tk") == [("iPhone 13 Pro", None, 85000)]
+
+
+def test_plus_model_followed_by_ram_storage():
+    [offer] = extract_offers("Samsung Galaxy S23+ 8/256 price 85000tk")
+    assert (offer.model, offer.storage_gb, offer.ram_gb, offer.price) == ("Galaxy S23+", 256, 8, 85000)
+
+
+def test_phone_spec_naming_its_chip_is_still_a_phone():
+    assert offers_of("iPhone 14 Pro A16 Bionic 128GB price 95000tk") == [("iPhone 14 Pro", 128, 95000)]
+
+
+def test_tk_with_a_dot_is_a_price():
+    assert offers_of("iPhone 13 Pro 128GB Price Tk. 85,000") == [("iPhone 13 Pro", 128, 85000)]
+
+
+def test_spaced_pm_is_pro_max():
+    assert offers_of("iPhone 13 pm 256gb 90000tk") == [("iPhone 13 Pro Max", 256, 90000)]
+
+
+def test_two_models_in_one_sentence_are_two_unpriced_offers():
+    assert offers_of("iPhone 13 and iPhone 14 available, inbox") == [("iPhone 13", None, None), ("iPhone 14", None, None)]

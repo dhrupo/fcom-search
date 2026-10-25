@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS offers (
 CREATE TABLE IF NOT EXISTS offer_posts (post_key TEXT PRIMARY KEY, offer_id TEXT NOT NULL);
 """
 INBOX = re.compile(r"\binbox\b|ইনবক্স|\bmessenger\b", re.IGNORECASE)
-PHONE_CATEGORIES = (None, "phones")
+PHONE_CATEGORIES = (None, "phones")  # compared lower-cased, as the crawler does
 
 
 class OffersError(RuntimeError):
@@ -76,7 +76,7 @@ def _read_rows(path: Path, cutoff: float) -> list[Row]:
     rows = []
     for sid, data in items:
         source, item = sources[sid], json.loads(data)
-        if source.category not in PHONE_CATEGORIES:
+        if (source.category and source.category.lower()) not in PHONE_CATEGORIES:
             continue
         thread = comments.get((sid, item["item_id"]), [])
         replies = [c.get("text") or "" for c in thread if c.get("is_owner")]
@@ -124,7 +124,8 @@ def build_offers(config: Config, now=time.time, allow_empty: bool = False) -> li
                 # An empty or unreadable store must not tell the site that every offer is gone.
                 raise OffersError(f"no offers found in the crawler store; refusing to expire {live} live offers "
                                   "(re-run with --allow-empty if the store really is empty)")
-            records = [_record(db, rows, set()) for rows in groups.values()]
+            claimed: set[str] = set()
+            records = [_record(db, rows, claimed) for rows in groups.values()]
             _save(db, records)
     finally:
         db.close()

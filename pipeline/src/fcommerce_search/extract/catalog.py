@@ -38,12 +38,14 @@ class Catalog:
         text = clean(text)
         for bangla, english in self._words.items():
             text = text.replace(bangla, f" {english} ")
-        text = re.sub(r"\+(?!\s*\d)", " plus ", text).replace("promax", "pro max")
+        # "16+512" is RAM+storage; the "+" in "S23+ 8/256" is the model's Plus.
+        text = re.sub(r"(?<!\w)(\d{1,2})\s*\+\s*(\d{2,4})\b", r"\1/\2", text)
+        text = text.replace("+", " plus ").replace("promax", "pro max")
         if self._lines:
             text = re.sub(rf"\b({'|'.join(map(re.escape, self._lines))})(\d)", r"\1 \2", text)
-        # "13pm" is iPhone shorthand, but "10am-11pm" and "till 12 pm" are shop hours.
+        # "13pm" / "13 pm" is iPhone shorthand, but "10am-11pm" and "till 12 pm" are shop hours.
         if not re.search(r"\d\s*am\b", text):
-            text = re.sub(r"\b(\d{2})pm\b", r"\1 pro max", text)
+            text = re.sub(r"(?<!till )(?<!to )(?<!until )(?<!open )(?<!close )\b(1[1-9])\s?pm\b", r"\1 pro max", text)
         text = re.sub(r"(\d)([a-z])", r"\1 \2", text)
         return re.findall(r"[a-z0-9]+", text)
 
@@ -56,7 +58,8 @@ class Catalog:
                 if tuple(tokens[i:i + len(seq)]) == seq:
                     # "iPhone 18 Pro Series" is a family; "A16 chip" / "A17 Pro chip" is Apple's chip, not a Galaxy.
                     after = tokens[i + len(seq):i + len(seq) + 2]
-                    if model not in found and after[:1] != ["series"] and not {"chip", "bionic"} & set(after):
+                    chip = seq[0] not in self._lines and {"chip", "bionic"} & set(after)
+                    if model not in found and after[:1] != ["series"] and not chip:
                         found.append(model)
                     i += len(seq)
                     break
