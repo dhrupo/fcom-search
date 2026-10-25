@@ -29,3 +29,11 @@ def test_non_utf8_config_is_a_config_error(tmp_path, broken):
     ({"ours": ours, "crawler": crawler}[broken]).write_bytes(b'places = ["\xff"]\n')
     with pytest.raises(ConfigError, match="cannot read"):
         load_config(ours)
+
+
+@pytest.mark.parametrize("url", ["fcommerce-search.pages.dev", "ftp://x", 42])
+def test_site_url_needs_http_scheme(tmp_path, url):
+    write(tmp_path / "crawler.toml", 'places = ["Sylhet"]\n')
+    value = f'"{url}"' if isinstance(url, str) else url
+    with pytest.raises(ConfigError, match="site.url"):
+        load_config(write(tmp_path / "fcommerce-search.toml", f'crawler_config = "crawler.toml"\n[site]\nurl = {value}\n'))

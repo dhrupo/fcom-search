@@ -1,10 +1,11 @@
 import argparse
 import logging
+import sqlite3
 import sys
 from pathlib import Path
 
 from .config import ConfigError, load_config
-from .offers import build_offers
+from .offers import OffersError, build_offers
 from .push import PushError, push_offers
 
 
@@ -23,7 +24,7 @@ def main(argv=None) -> int:
         config = load_config(Path(args.config))
         records = build_offers(config)
         result = push_offers(config)
-    except (ConfigError, PushError) as e:
+    except (ConfigError, OffersError, PushError, sqlite3.Error) as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
     print(f"{len(records)} offers; pushed {result.sent}, expired {result.expired}")

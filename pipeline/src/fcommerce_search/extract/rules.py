@@ -16,7 +16,7 @@ NOT_A_PRICE = re.compile(r"\b(bonus|discount|cashback|off|save|trade|exchange|em
 PRICES = [
     (re.compile(r"(?:bdt|tk|taka|৳|টাকা)\s*[:.]?\s*(\d[\d,]*)"), 1),
     (re.compile(r"(\d[\d,]*)\s*(?:/-|tk\b|taka|টাকা|bdt|৳)"), 1),
-    (re.compile(r"(\d+(?:\.\d+)?)\s*k\b"), 1000),
+    (re.compile(r"(\d+(?:\.\d+)?)\s*k\b(?!\s*(?:video|recording|display|screen|hdr|uhd|zoom|@|\d))"), 1000),
     (re.compile(r"(\d+(?:\.\d+)?)\s*(?:hajar|hazar|হাজার)"), 1000),
     (re.compile(r"\b(?:price|দাম)\s*[:\-]?\s*(\d[\d,]*)"), 1),
 ]
@@ -46,11 +46,10 @@ def _clean(text: str) -> str:
 
 
 def _prices(line: str) -> list[int]:
-    if NOT_A_PRICE.search(line):
-        return []
     found = []
+    clauses = [c for c in re.split(r"[;|]|,\s", line) if not NOT_A_PRICE.search(c)]
     for pattern, scale in PRICES:
-        for m in pattern.finditer(line):
+        for m in (m for clause in clauses for m in pattern.finditer(clause)):
             value = round(float(m.group(1).replace(",", "")) * scale)
             if value >= MIN_PHONE_PRICE and value not in found:
                 found.append(value)
@@ -62,15 +61,17 @@ def _storages(line: str) -> list[tuple[int, int | None]]:
     for ram, storage in re.findall(r"\b(\d{1,2})\s*/\s*(\d{2,4})\b", line):
         if int(storage) in STORAGE_GB and int(ram) <= 24:
             found.append((int(storage), int(ram)))
-    for storage in re.findall(r"\b(\d{2,4})\s*(?:gb|জিবি)\b", line):
+    for storage in re.findall(r"\b(\d{2,4})\s*(?:gb|জিবি)\b(?!\s*ram)", line):
         if int(storage) in STORAGE_GB:
             found.append((int(storage), None))
     for tb in re.findall(r"\b(\d)\s*tb\b", line):
         found.append((int(tb) * 1024, None))
+    rams = set(re.findall(r"\b(\d{1,2})\s*gb\s*ram\b", line))
+    ram_alone = int(next(iter(rams))) if len(rams) == 1 else None
     unique = []
     for storage, ram in found:
         if storage not in [s for s, _ in unique]:
-            unique.append((storage, ram))
+            unique.append((storage, ram if ram is not None else ram_alone))
     return unique
 
 
@@ -101,6 +102,7 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
     post = _clean(text)
     lines = post.splitlines()
     base = {"condition": _condition(post), "box": _box(post)}
+    post_region = _region(post)
 
     table, current = [], []
     for line in lines:
@@ -111,14 +113,14 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
             current = []  # a heading for something else ("iPad", "MacBook") ends the phone's rows
         if current and len(prices) == 1 and len(storages) == 1:
             storage, ram = storages[0]
-            table.append(Offer(current[0].brand, current[0].model, storage, ram, region=_region(line),
+            table.append(Offer(current[0].brand, current[0].model, storage, ram, region=_region(line) or post_region,
                                price=prices[0], price_source="post", **base))
     if len(table) >= 2:
         return table
 
     models = catalog.find_models(post)
     storages = _storages(post) or [(None, None)]
-    offers = [Offer(m.brand, m.model, storage, ram, region=_region(post), **base)
+    offers = [Offer(m.brand, m.model, storage, ram, region=post_region, **base)
               for m in models for storage, ram in storages]
     if len(offers) != 1:
         return offers

@@ -46,5 +46,8 @@ def load_config(path: Path) -> Config:
     site = raw.get("site") or {}
     if not isinstance(site, dict):
         raise ConfigError('site must be a table, e.g. [site] url = "https://fcommerce-search.pages.dev"')
+    url = site.get("url")
+    if url is not None and not (isinstance(url, str) and url.startswith(("http://", "https://"))):
+        raise ConfigError('site.url must start with http:// or https://, e.g. "https://fcommerce-search.pages.dev"')
     secret_file = Path(site["secret_file"]).expanduser() if site.get("secret_file") else DEFAULT_SECRET_FILE
-    return Config(crawler=crawler, crawler_data_dir=data_dir, site_url=site.get("url"), secret_file=secret_file)
+    return Config(crawler=crawler, crawler_data_dir=data_dir, site_url=url, secret_file=secret_file)

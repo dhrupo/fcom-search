@@ -1,3 +1,4 @@
+import http.client
 import json
 import logging
 import sqlite3
@@ -37,18 +38,18 @@ def _read_secret(config: Config) -> str:
 
 
 def _send(config: Config, secret: str, upsert: list[dict], expire: list[str]) -> None:
-    request = urllib.request.Request(
-        config.site_url.rstrip("/") + "/api/ingest",
-        data=json.dumps({"upsert": upsert, "expire": expire}, ensure_ascii=False).encode(),
-        headers={"Content-Type": "application/json", "X-Ingest-Secret": secret},
-        method="POST",
-    )
     try:
+        request = urllib.request.Request(
+            config.site_url.rstrip("/") + "/api/ingest",
+            data=json.dumps({"upsert": upsert, "expire": expire}, ensure_ascii=False).encode(),
+            headers={"Content-Type": "application/json", "X-Ingest-Secret": secret},
+            method="POST",
+        )
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
             answer = json.loads(response.read() or b"{}")
     except urllib.error.HTTPError as e:
         raise PushError(f"the site refused the push (HTTP {e.code})") from None
-    except (urllib.error.URLError, TimeoutError, ValueError) as e:
+    except (http.client.HTTPException, OSError, ValueError) as e:
         raise PushError(f"the push did not reach the site ({type(e).__name__})") from None
     # The site's own answer counts, not just HTTP 200: a 200 with ok=false is a failed batch.
     if not (isinstance(answer, dict) and answer.get("ok") is True):

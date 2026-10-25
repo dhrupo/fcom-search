@@ -77,17 +77,23 @@ def test_only_changed_offers_sent(tmp_path, site):
     assert sent(calls) == (["iPhone 15"], [])
 
 
+def keep_another_shop(store):
+    other = store.add_source("https://www.facebook.com/other", "fb_page", "Sylhet", "phones", name="Other")
+    post(store, other, "o1", "iPhone 15 128GB, 85k")
+
+
 def test_vanished_offer_is_sent_as_expired(tmp_path, site):
     url, calls, _ = site
     store, shop, config = setup(tmp_path, url)
     post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
     [record] = build_offers(config, now=lambda: NOW)
     push_offers(config)
+    keep_another_shop(store)
     store.remove_source(shop.url)
     build_offers(config, now=lambda: NOW)
     calls.clear()
     assert push_offers(config).expired == 1
-    assert sent(calls) == ([], [record.offer_id])
+    assert sent(calls) == (["iPhone 15"], [record.offer_id])
     calls.clear()
     assert (push_offers(config).expired, calls) == (0, [])
 
@@ -136,6 +142,28 @@ def test_offer_that_vanishes_before_its_first_push_is_not_sent(tmp_path, site):
     store, shop, config = setup(tmp_path, url)
     post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
     build_offers(config, now=lambda: NOW)
+    keep_another_shop(store)
     store.remove_source(shop.url)
     build_offers(config, now=lambda: NOW)
-    assert (push_offers(config).expired, calls) == (0, [])
+    assert push_offers(config).expired == 0
+    assert sent(calls) == (["iPhone 15"], [])
+
+
+def test_dropped_connection_is_a_push_error(tmp_path):
+    import socket
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+
+    def accept_and_drop():
+        conn, _ = listener.accept()
+        conn.recv(65536)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{\"ok\"")
+        conn.close()
+
+    threading.Thread(target=accept_and_drop, daemon=True).start()
+    store, shop, config = setup(tmp_path, f"http://127.0.0.1:{listener.getsockname()[1]}")
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k")
+    build_offers(config, now=lambda: NOW)
+    with pytest.raises(PushError):
+        push_offers(config)

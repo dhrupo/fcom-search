@@ -3,11 +3,12 @@ import sqlite3
 import threading
 import time
 
+import pytest
 from crawler.config import Config as CrawlerConfig
 from crawler.store import Store
 
 from fcommerce_search.config import Config
-from fcommerce_search.offers import build_offers, serialize
+from fcommerce_search.offers import OffersError, build_offers, serialize
 
 NOW = 1_792_900_000.0
 BUYER = "Rahim Uddin Chowdhury"
@@ -15,6 +16,7 @@ PRIVATE_ID = "100089998887776"
 
 
 def setup(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
     store = Store(tmp_path, clock=lambda: NOW)
     config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=tmp_path)
     return store, config
@@ -107,3 +109,57 @@ def test_page_without_a_name_shows_its_address_name(tmp_path):
     post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k", NOW - 3600)
     [offer] = [serialize(r) for r in build_offers(config, now=lambda: NOW)]
     assert (offer["seller"], offer["source_name"]) == ("iStoreSyl", "iStoreSyl")
+
+
+def test_marketplace_listing_without_price_is_unknown(tmp_path):
+    store, config = setup(tmp_path)
+    mp = store.add_source("marketplace:Sylhet", "fb_marketplace", "Sylhet", None)
+    store.upsert_item(mp.id, {"item_id": "m1", "title": "iPhone 13", "price": "unknown", "created_at": NOW - 60,
+                              "permalink": "https://www.facebook.com/marketplace/item/m1"})
+    [offer] = [serialize(r) for r in build_offers(config, now=lambda: NOW)]
+    assert (offer["model"], offer["price"]) == ("iPhone 13", None)
+
+
+def test_two_rows_with_same_facts_in_one_post_count_once(tmp_path):
+    store, config = setup(tmp_path)
+    shop = store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "phones", name="Shop")
+    post(store, shop, "p1", "iPhone 15\n128GB black ---- 90,000tk\n128GB white ---- 92,000tk", NOW - 3600)
+    store.upsert_comments(shop.id, "p1", [{"comment_id": "c1", "item_id": "p1", "text": "price?", "is_owner": False}])
+    [offer] = [serialize(r) for r in build_offers(config, now=lambda: NOW)]
+    assert (offer["post_count"], offer["comment_count"], len(offer["posts"])) == (1, 1, 1)
+
+
+def test_empty_store_does_not_expire_live_offers(tmp_path):
+    store, config = setup(tmp_path)
+    shop = store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "phones", name="Shop")
+    post(store, shop, "p1", "iPhone 13 Pro 128GB, 72k", NOW - 3600)
+    build_offers(config, now=lambda: NOW)
+    store.remove_source(shop.url)
+    with pytest.raises(OffersError, match="no offers"):
+        build_offers(config, now=lambda: NOW)
+    db = sqlite3.connect(tmp_path / "crawler.sqlite3")
+    assert db.execute("SELECT count(*) FROM offers WHERE expired = 0").fetchone() == (1,)
+
+
+def test_missing_crawler_database_is_an_error(tmp_path):
+    config = Config(crawler=CrawlerConfig(places=("Sylhet",)), crawler_data_dir=tmp_path / "nowhere")
+    with pytest.raises(OffersError, match="crawler.sqlite3"):
+        build_offers(config, now=lambda: NOW)
+    assert not (tmp_path / "nowhere").exists()
+
+
+def test_comment_reads_do_not_grow_with_posts(tmp_path, monkeypatch):
+    reads = []
+    original = Store._read
+    monkeypatch.setattr(Store, "_read", lambda self, sql, params=(): reads.append(sql) or original(self, sql, params))
+
+    def count(n):
+        store, config = setup(tmp_path / str(n))
+        shop = store.add_source("https://www.facebook.com/shop", "fb_page", "Sylhet", "phones", name="Shop")
+        for i in range(n):
+            post(store, shop, f"p{i}", f"iPhone 1{i} Pro 128GB, 72k", NOW - 3600)
+        reads.clear()
+        build_offers(config, now=lambda: NOW)
+        return len(reads)
+
+    assert count(1) == count(4)

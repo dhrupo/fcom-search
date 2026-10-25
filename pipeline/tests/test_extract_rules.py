@@ -63,3 +63,24 @@ def test_bonus_amount_is_not_a_price():
 def test_two_regions_stay_unknown():
     [offer] = extract_offers("iPhone 16 (Global/ Australia Variant)-----------128 GB-------------BDT 1,06,999/-")
     assert (offer.region, offer.price) == (None, 106999)
+
+
+def test_video_resolution_is_not_a_price():
+    [offer] = extract_offers("iPhone 15 Pro 256GB, 4K video, 8k zoom, price 1,20,000 tk")
+    assert offer.price == 120000
+
+
+def test_ram_size_is_not_a_storage():
+    [offer] = extract_offers("Galaxy S25 Ultra 16GB RAM 1TB 1,60,000tk")
+    assert (offer.storage_gb, offer.ram_gb, offer.price) == (1024, 16, 160000)
+
+
+def test_heading_region_applies_to_table_rows():
+    offers = extract_offers("All UK version, brand new\niPhone 15\n128GB ---- 90,000tk\n256GB ---- 1,00,000tk")
+    assert [(o.region, o.condition, o.storage_gb, o.price) for o in offers] == [
+        ("UK", "new", 128, 90000), ("UK", "new", 256, 100000)]
+
+
+def test_price_next_to_delivery_note_is_kept():
+    [offer] = extract_offers("iPhone 13 128GB 55,000tk, delivery charge free")
+    assert offer.price == 55000

@@ -20,6 +20,10 @@ INBOX = re.compile(r"\binbox\b|ইনবক্স|\bmessenger\b", re.IGNORECASE)
 WRITE_WAIT_SECONDS = 30
 
 
+class OffersError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True)
 class OfferRecord:
     offer_id: str
@@ -44,12 +48,16 @@ def _fold_key(source: Source, item: dict, offer: Offer) -> str:
 
 def _read_offers(store: Store, cutoff: float):
     for source in store.list_sources():
+        by_item: dict[str, list] = {}
+        for comment in store.comments_of_source(source.id):
+            by_item.setdefault(comment.get("item_id"), []).append(comment)
         for item in store.items_for(source.id):
             if item.get("created_at") is not None and item["created_at"] < cutoff:
                 continue
-            comments = store.comments_for(source.id, item["item_id"])
+            comments = by_item.get(item["item_id"], [])
             replies = [c.get("text") or "" for c in comments if c.get("is_owner")]
-            listing = (item.get("price") or {}).get("amount") if source.kind == "fb_marketplace" else None
+            price = item.get("price")
+            listing = price.get("amount") if source.kind == "fb_marketplace" and isinstance(price, dict) else None
             text = item.get("text") or item.get("title") or ""
             for offer in extract_offers(text, replies, listing_price=listing):
                 yield source, item, comments, replies, offer
@@ -57,10 +65,14 @@ def _read_offers(store: Store, cutoff: float):
 
 def build_offers(config: Config, now=time.time) -> list[OfferRecord]:
     """Rebuild every live offer from the crawler's store and save it to the offers table."""
+    if not (config.crawler_data_dir / "crawler.sqlite3").is_file():
+        raise OffersError(f"no crawler.sqlite3 in {config.crawler_data_dir}: check crawler_config and its data_dir")
     store = Store(config.crawler_data_dir, clock=now)
     groups: dict[str, list] = {}
     for source, item, comments, replies, offer in _read_offers(store, now() - HISTORY_DAYS * DAY):
-        groups.setdefault(_fold_key(source, item, offer), []).append((source, item, comments, replies, offer))
+        rows = groups.setdefault(_fold_key(source, item, offer), [])
+        if all(r[1]["item_id"] != item["item_id"] for r in rows):
+            rows.append((source, item, comments, replies, offer))
 
     records = []
     for offer_id, rows in groups.items():
@@ -87,8 +99,12 @@ def _save(config: Config, records: list[OfferRecord], now: float) -> None:
     run = uuid.uuid4().hex
     db = sqlite3.connect(config.crawler_data_dir / "crawler.sqlite3", timeout=WRITE_WAIT_SECONDS)
     try:
+        db.executescript(OFFERS_SCHEMA)
         with db:
-            db.executescript(OFFERS_SCHEMA)
+            live = db.execute("SELECT count(*) FROM offers WHERE expired = 0").fetchone()[0]
+            if not records and live:
+                # An empty or unreadable store must not tell the site that every offer is gone.
+                raise OffersError(f"no offers found in the crawler store; refusing to expire {live} live offers")
             for record in records:
                 payload = json.dumps(serialize(record), ensure_ascii=False, sort_keys=True)
                 db.execute(
