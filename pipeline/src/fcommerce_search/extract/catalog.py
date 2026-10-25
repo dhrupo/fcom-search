@@ -7,6 +7,12 @@ from importlib import resources
 BANGLA_DIGITS = str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789")
 
 
+def clean(text: str) -> str:
+    """Casefold, NFKC (bold Unicode → ASCII), Bangla digits → ASCII, and drop hashtags."""
+    text = unicodedata.normalize("NFKC", text).casefold().translate(BANGLA_DIGITS)
+    return re.sub(r"#\S+", " ", text)
+
+
 @dataclass(frozen=True)
 class PhoneModel:
     brand: str
@@ -29,8 +35,7 @@ class Catalog:
         self._sequences = sorted(sequences.items(), key=lambda kv: -len(kv[0]))
 
     def _tokens(self, text: str) -> list[str]:
-        text = unicodedata.normalize("NFKC", text).casefold().translate(BANGLA_DIGITS)
-        text = re.sub(r"#\S+", " ", text)
+        text = clean(text)
         for bangla, english in self._words.items():
             text = text.replace(bangla, f" {english} ")
         text = re.sub(r"\+(?!\s*\d)", " plus ", text).replace("promax", "pro max")

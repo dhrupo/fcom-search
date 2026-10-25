@@ -1,9 +1,8 @@
 import re
-import unicodedata
 from dataclasses import dataclass, replace
 from functools import cache
 
-from .catalog import BANGLA_DIGITS, Catalog, load_catalog
+from .catalog import Catalog, clean, load_catalog
 
 MIN_PHONE_PRICE = 1000
 MAX_PHONE_PRICE = 1_000_000
@@ -46,11 +45,6 @@ class Offer:
 @cache
 def _phones() -> Catalog:
     return load_catalog("phones")
-
-
-def _clean(text: str) -> str:
-    text = unicodedata.normalize("NFKC", text).casefold().translate(BANGLA_DIGITS)
-    return re.sub(r"#\S+", " ", text)
 
 
 def _prices(line: str) -> list[int]:
@@ -116,7 +110,7 @@ def _is_accessory(text: str) -> bool:
 def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = None) -> list[Offer]:
     """Read a post (and the seller's replies) into offers; any fact not clearly stated stays None."""
     catalog = _phones()
-    post = _clean(text)
+    post = clean(text)
     lines = post.splitlines()
     base = {"condition": _condition(post), "box": _box(post)}
     post_region = _region(post)
@@ -148,7 +142,7 @@ def extract_offers(text: str, seller_replies=(), *, listing_price: int | None = 
         return offers
 
     post_prices = [p for clause in clauses for p in _prices(clause)]
-    reply_prices = list(dict.fromkeys(p for reply in seller_replies for p in _prices(_clean(reply))))
+    reply_prices = list(dict.fromkeys(p for reply in seller_replies for p in _prices(clean(reply))))
     if len(reply_prices) == 1:
         price, source = reply_prices[0], "seller_reply"
     elif len(set(post_prices)) == 1:
