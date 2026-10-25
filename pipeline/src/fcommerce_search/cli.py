@@ -1,6 +1,5 @@
 import argparse
 import fcntl
-import logging
 import sqlite3
 import sys
 from pathlib import Path
@@ -22,7 +21,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
-    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
         config = load_config(Path(args.config))
         config.state_db.parent.mkdir(parents=True, exist_ok=True)
