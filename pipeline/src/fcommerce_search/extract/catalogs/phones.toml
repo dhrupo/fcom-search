@@ -14,6 +14,10 @@
 "ফোল্ড" = "fold"
 "ফ্লিপ" = "flip"
 
+# Whole-word misspellings sellers use.
+[typos]
+mex = "max"
+
 [[brand]]
 name = "Apple"
 line = "iPhone"

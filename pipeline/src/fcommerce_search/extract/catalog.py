@@ -22,6 +22,7 @@ class PhoneModel:
 class Catalog:
     def __init__(self, raw: dict):
         self._words = raw.get("words", {})
+        self._typos = raw.get("typos", {})
         self._lines = [b["line"].lower() for b in raw["brand"]]
         sequences = {}
         for brand in raw["brand"]:
@@ -49,7 +50,7 @@ class Catalog:
             text = re.sub(r"(?<!at )(?<!by )(?<!till )(?<!to )(?<!until )(?<!from )(?<!open )(?<!close )"
                           r"(?<![-–])\b(1[1-9])pm\b", r"\1 pro max", text)
         text = re.sub(r"(\d)([a-z])", r"\1 \2", text)
-        return re.findall(r"[a-z0-9]+", text)
+        return [self._typos.get(t, t) for t in re.findall(r"[a-z0-9]+", text)]
 
     def find_models(self, text: str) -> list[PhoneModel]:
         tokens = self._tokens(text)
@@ -60,8 +61,11 @@ class Catalog:
                 if tuple(tokens[i:i + len(seq)]) == seq:
                     # "iPhone 18 Pro Series" is a family; "A16 chip" / "A17 Pro chip" is Apple's chip, not a Galaxy.
                     after = tokens[i + len(seq):i + len(seq) + 2]
-                    chip = seq[0] not in self._lines and {"chip", "bionic"} & set(after)
-                    if model not in found and after[:1] != ["series"] and not chip:
+                    bare = seq[0] not in self._lines
+                    chip = bare and {"chip", "bionic"} & set(after)
+                    # "Pixel 11 Pro" must not become a bare "11 Pro" iPhone when Pixel 11 is not catalogued.
+                    other_line = bare and i > 0 and tokens[i - 1] in self._lines
+                    if model not in found and after[:1] != ["series"] and not chip and not other_line:
                         found.append(model)
                     i += len(seq)
                     break
