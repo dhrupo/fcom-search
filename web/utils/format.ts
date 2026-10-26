@@ -11,3 +11,9 @@ export const CITY_STATUS: Record<string, (found: number) => string> = {
   failed: () => "could not be searched",
   no_address: () => "has no Marketplace address",
 };
+
+export const PROBLEMS: Record<string, string> = {
+  "": "Search failed. Please check the place and try again.",
+  human: "We could not confirm you are human. Wait a moment and search again.",
+  slow: "Slow down, try again in a minute.",
+};

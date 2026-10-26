@@ -22,6 +22,30 @@ const searchId = ref<string | null>(null);
 const canLoadMore = ref(false);
 const basicMode = ref(false);
 const loadingMore = ref(false);
+const problem = ref<"" | "human" | "slow">("");
+const token = ref("");
+const turnstileBox = ref<HTMLElement | null>(null);
+let widgetId: string | undefined;
+const siteKey = useRuntimeConfig().public.turnstileSiteKey as string;
+
+onMounted(() => {
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+  script.async = true;
+  script.onload = () => {
+    widgetId = (window as any).turnstile.render(turnstileBox.value, { sitekey: siteKey, size: "flexible",
+      callback: (t: string) => { token.value = t; }, "expired-callback": () => { token.value = ""; } });
+  };
+  document.head.appendChild(script);
+});
+
+/** A Turnstile token works once: take it and ask the widget for the next one. */
+function takeToken(): string {
+  const t = token.value;
+  token.value = "";
+  if (widgetId !== undefined) (window as any).turnstile.reset(widgetId);
+  return t;
+}
 
 const label = (p: Place) => [p.name, p.country].filter(Boolean).join(", ");
 
@@ -69,6 +93,7 @@ const amount = (v: string) => (v.trim() === "" ? null : Number(v.replace(/[^\d.]
 let searchAbort: AbortController | undefined;
 
 async function readEvents(res: Response) {
+  if (res.status === 403 || res.status === 429) problem.value = res.status === 429 ? "slow" : "human";
   if (!res.ok || !res.body) throw new Error(String(res.status));
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -84,19 +109,27 @@ async function readEvents(res: Response) {
 }
 
 async function search() {
-  if (!keyword.value.trim() || !place.value) return;
+  if (!keyword.value.trim() || !place.value || !token.value) return;
   searchAbort?.abort();
   const abort = (searchAbort = new AbortController());
   cities.value = []; results.value = []; phase.value = "searching";
-  searchId.value = null; canLoadMore.value = false; basicMode.value = false;
+  searchId.value = null; canLoadMore.value = false; basicMode.value = false; problem.value = "";
   try {
     const res = await fetch("/api/search", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
       body: JSON.stringify({ keyword: keyword.value.trim(), lat: place.value.lat, lon: place.value.lon,
         radius_km: Math.min(100, Math.max(10, Number(radius.value) || 40)), min_price: amount(minPrice.value),
-        max_price: amount(maxPrice.value), days: days.value }),
+        max_price: amount(maxPrice.value), days: days.value, turnstile: takeToken() }),
     });
     await readEvents(res);
+    // Basic mode: one request per city (each must stay under Cloudflare's 10 ms CPU limit).
+    for (const city of basicMode.value && phase.value === "searching" ? cities.value.map((c) => c.name) : []) {
+      if (abort !== searchAbort) return;
+      await readEvents(await fetch("/api/city", {
+        method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
+        body: JSON.stringify({ search_id: searchId.value, city }),
+      }));
+    }
     if (abort === searchAbort && phase.value === "searching") throw new Error("stream ended early");
   } catch (e) {
     if (abort === searchAbort) phase.value = "error";
@@ -107,6 +140,7 @@ async function loadMore() {
   if (!searchId.value || loadingMore.value) return;
   loadingMore.value = true;
   phase.value = "searching";
+  problem.value = "";
   const abort = searchAbort;
   try {
     await readEvents(await fetch("/api/more", {
@@ -123,7 +157,10 @@ async function loadMore() {
 
 function applySearchEvent(event: any) {
   if (event.type === "mode") basicMode.value = event.mode === "basic";
-  if (event.type === "start") cities.value = event.cities.map((name: string) => ({ name, status: "searching", found: 0 }));
+  if (event.type === "start") {
+    cities.value = event.cities.map((name: string) => ({ name, status: "searching", found: 0 }));
+    searchId.value = event.search_id ?? null;
+  }
   if (event.type === "city") {
     const city = cities.value.find((c) => c.name === event.city);
     if (city) Object.assign(city, { status: event.status, found: (loadingMore.value ? city.found : 0) + event.found });
@@ -195,14 +232,15 @@ const summary = computed(() => {
           <option v-for="d in [3, 7, 15, 30, 45, 60]" :key="d" :value="d">Last {{ d }} days</option>
         </select>
       </label>
-      <button type="submit" :disabled="!keyword.trim() || !place || phase === 'searching'"
+      <button type="submit" :disabled="!keyword.trim() || !place || !token || phase === 'searching'"
               class="self-end rounded-lg bg-teal-700 px-5 py-2.5 font-medium text-white hover:bg-teal-800 focus:outline-none focus:ring-2 focus:ring-teal-700/40 disabled:opacity-50 md:col-span-2">
-        Search
+        {{ token ? "Search" : "Checking you're human…" }}
       </button>
+      <div ref="turnstileBox" class="md:col-span-6" />
     </form>
 
     <p v-if="phase === 'error'" role="alert" class="mt-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
-      Search failed. Please check the place and try again.
+      {{ PROBLEMS[problem] }}
     </p>
     <p v-if="basicMode" class="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
       Facebook's map search is not answering right now, so this is basic mode: we searched the big cities nearby by name.

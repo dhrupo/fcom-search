@@ -6,7 +6,7 @@ import { Places, type Limiter } from "./places.ts";
 export interface Env {
   DB: DB; ASSETS: { fetch(request: Request): Promise<Response> };
   SEARCH_LIMIT: Limiter; MORE_LIMIT: Limiter; PLACES_LIMIT: Limiter; PHOTON_LIMIT: Limiter;
-  FB_ORIGIN: string; PHOTON_ORIGIN: string; TURNSTILE_SECRET?: string;
+  FB_ORIGIN: string; PHOTON_ORIGIN: string; TURNSTILE_SECRET?: string; TURNSTILE_VERIFY_URL?: string;
 }
 
 const MAX_BODY = 10_000;
@@ -90,7 +90,7 @@ async function readJson(request: Request): Promise<unknown> {
 export function makeHandler({ fetch = globalThis.fetch.bind(globalThis) as Fetch, now = () => Date.now() / 1000 } = {}) {
   async function turnstileOk(env: Env, token: string, ip: string): Promise<boolean> {
     try {
-      const answer = await fetch(SITEVERIFY, { method: "POST",
+      const answer = await fetch(env.TURNSTILE_VERIFY_URL || SITEVERIFY, { method: "POST",
         body: new URLSearchParams({ secret: env.TURNSTILE_SECRET!, response: token, remoteip: ip }).toString(),
         headers: { "content-type": "application/x-www-form-urlencoded" } });
       return (await answer.json() as { success?: boolean }).success === true;

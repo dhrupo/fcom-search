@@ -26,7 +26,7 @@ function setup({ replay = replayFetch(), searchLimit = limiter(), secret = "test
   const upstream = async (url: string, init?: RequestInit) => {
     if (url.startsWith("https://challenges.cloudflare.com/")) {
       const form = Object.fromEntries(new URLSearchParams(String(init?.body)));
-      verified.push(form);
+      verified.push({ ...form, url });
       return Response.json({ success: form.secret === "test-secret" && form.response === "pass" });
     }
     if (url.startsWith("https://photon.test/")) {
@@ -164,4 +164,11 @@ test("pages_and_unknown_api_paths", async () => {
   assert.equal((await call("GET", "/")).text, "<h1>fcommerce-search</h1>");
   assert.equal((await call("GET", "/api/nothing")).status, 404);
   assert.equal((await call("PUT", "/api/search", SEARCH, ORIGIN)).status, 405);
+});
+
+test("turnstile_check_goes_to_the_configured_verify_url", async () => {
+  const { call, verified, env } = setup();
+  env.TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/e2e-replay/siteverify";
+  await call("POST", "/api/search", SEARCH, ORIGIN);
+  assert.equal(verified.at(-1)?.url, "https://challenges.cloudflare.com/e2e-replay/siteverify");
 });

@@ -2,6 +2,18 @@ import { expect, test, type Page } from "@playwright/test";
 import { BASIC_PORT } from "../playwright.config";
 
 const BASIC = `http://127.0.0.1:${BASIC_PORT}/`;
+const TURNSTILE = "https://challenges.cloudflare.com/turnstile/v0/api.js*";
+// Stand-in for Cloudflare's widget: hands out a token the replay upstream accepts and counts resets.
+const widget = (token: string) => `window.__resets = 0; window.turnstile = {
+  render(el, o) { this.o = o; setTimeout(() => o.callback(${JSON.stringify(token)})); return "w1"; },
+  reset() { window.__resets++; setTimeout(() => this.o.callback(${JSON.stringify(token)})); }, remove() {} };`;
+
+test.beforeEach(async ({ page }, testInfo) => {
+  await page.route(TURNSTILE, (route) => route.fulfill({ contentType: "text/javascript", body: widget("e2e-pass") }));
+  // Each test gets its own address, so per-visitor limits never leak between tests.
+  const n = [...testInfo.testId].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) & 0xffffff;
+  await page.setExtraHTTPHeaders({ "cf-connecting-ip": `10.${(n >> 16) & 255}.${(n >> 8) & 255}.${n & 255}` });
+});
 
 async function pickPlace(page: Page, typed: string, option: RegExp) {
   await page.getByLabel("Place").fill(typed);
@@ -158,4 +170,56 @@ test("basic_mode_notice", async ({ page }) => {
   await expect(page.getByText(/basic mode/i)).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Done:");
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+});
+
+test("turnstile_token_sent_with_search", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  const sent = page.waitForRequest("**/api/search");
+  await page.getByRole("button", { name: "Search" }).click();
+  expect((await sent).postDataJSON().turnstile).toBe("e2e-pass");
+  await expect(page.getByRole("status")).toContainText("Done:");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __resets: number }).__resets)).toBe(1);
+  const again = page.waitForRequest("**/api/search");
+  await page.getByRole("button", { name: "Search" }).click();
+  expect((await again).postDataJSON().turnstile).toBe("e2e-pass");
+  await expect(page.getByRole("status")).toContainText("Done:");
+});
+
+test("search_without_token_refused", async ({ page }) => {
+  const body = { keyword: "iphone", lat: 24.8949, lon: 91.8687, radius_km: 10 };
+  const origin = { origin: "http://127.0.0.1:8797" };
+  expect((await page.request.post("/api/search", { data: body, headers: origin })).status()).toBe(403);
+  expect((await page.request.post("/api/search", { data: { ...body, turnstile: "forged" }, headers: origin })).status()).toBe(403);
+
+  await page.unroute(TURNSTILE);
+  await page.route(TURNSTILE, (route) => route.fulfill({ contentType: "text/javascript", body: widget("forged") }));
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("alert")).toContainText("confirm you are human");
+  await expect(page.getByRole("list", { name: "Results" })).toHaveCount(0);
+});
+
+test("seventh_search_in_a_minute_shows_slow_down", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  for (let i = 0; i < 6; i++) {
+    await page.getByRole("button", { name: "Search" }).click();
+    await expect(page.getByRole("status")).toContainText("Done:");
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  }
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("alert")).toContainText("Slow down, try again in a minute");
+});
+
+test("foreign_origin_post_refused", async ({ page }) => {
+  const body = { keyword: "iphone", lat: 24.8949, lon: 91.8687, radius_km: 10, turnstile: "e2e-pass" };
+  const evil = await page.request.post("/api/search", { data: body, headers: { origin: "https://evil.example" } });
+  expect(evil.status()).toBe(403);
+  const own = await page.request.post("/api/search", { data: body, headers: { origin: "http://127.0.0.1:8797" } });
+  expect(own.status()).toBe(200);
 });
