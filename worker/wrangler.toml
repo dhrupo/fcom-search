@@ -1,9 +1,12 @@
 name = "fcomsearch"
+main = "src/index.ts"
 compatibility_date = "2026-09-01"
 
 [assets]
 directory = "../web/.output/public"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
 
 [vars]
 FB_ORIGIN = "https://www.facebook.com"
