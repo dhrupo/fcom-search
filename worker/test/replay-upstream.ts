@@ -28,6 +28,15 @@ createServer(async (req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify({ success: new URLSearchParams(body).get("response") === E2E_TOKEN }));
   }
+  if (url.pathname === "/ai/api/v1/chat/completions") {
+    // Like the AI check: a listing matches when its title holds every search word.
+    const prompt = JSON.parse(body).messages.at(-1).content as string;
+    const words = (prompt.match(/^Search: (.*)$/m)?.[1] ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+    const match = [...prompt.matchAll(/^(\d+)\. (.*)$/gm)].filter(([, , line]) => words.every((w) => line.toLowerCase().includes(w)))
+      .map(([, n]) => Number(n));
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ match }) } }] }));
+  }
   if (url.pathname.startsWith("/photon/")) {
     res.writeHead(200, { "content-type": "application/json" });
     if (url.pathname === "/photon/reverse") return res.end(geojson([PLACES.sylhet]));

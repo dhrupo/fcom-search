@@ -239,3 +239,35 @@ test("results_still_show_when_saving_is_off", async ({ page }) => {
   await expect(page.getByText("Results are not being saved right now, so Load more is off.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
 });
+
+test("ai_matches_show_first_and_others_fold", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone 13");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("status")).toContainText("Done:");
+  const cards = page.getByRole("list", { name: "Results" }).getByRole("listitem");
+  const others = page.getByRole("button", { name: /^Show \d+ other listings$/ });
+  await expect(others).toBeVisible();
+  await expect(cards.first()).toContainText("AI match");
+  const tagged = cards.filter({ hasText: "AI match" });
+  await expect(tagged).toHaveCount(await cards.count());
+  for (const title of await tagged.getByRole("heading").allTextContents()) expect(title).toContain("13");
+  const hidden = Number((await others.textContent())!.match(/\d+/)![0]);
+  const shown = await cards.count();
+  await others.click();
+  await expect(cards).toHaveCount(shown + hidden);
+  await expect(others).toHaveCount(0);
+});
+
+test("no_ai_answer_looks_like_today", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("phone case");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("status")).toContainText("Done:");
+  const cards = page.getByRole("list", { name: "Results" }).getByRole("listitem");
+  await expect(cards.first()).toBeVisible();
+  await expect(page.getByText("AI match")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /other listings/ })).toHaveCount(0);
+});
