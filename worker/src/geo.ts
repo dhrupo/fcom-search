@@ -47,3 +47,15 @@ export async function findTown(db: DB, name: string, country?: string): Promise<
   return db.prepare(`SELECT ${COLUMNS} FROM cities WHERE (name_key = ? OR ascii_key = ?)${country ? " AND country = ?" : ""}
     ORDER BY population DESC LIMIT 1`).bind(key, key, ...(country ? [country] : [])).first<City>();
 }
+
+export interface NamedCity extends City { country_name: string | null }
+
+/** Bundled cities whose name starts with the prefix, most populous first, with the country's name. */
+export async function citiesByPrefix(db: DB, prefix: string, limit = 4): Promise<NamedCity[]> {
+  const low = nameKey(prefix), high = low + "\uffff";
+  const { results } = await db.prepare(`SELECT c.name, c.country, c.lat, c.lon, c.population, n.name AS country_name
+    FROM cities c LEFT JOIN countries n ON n.code = c.country
+    WHERE (c.name_key >= ? AND c.name_key < ?) OR (c.ascii_key >= ? AND c.ascii_key < ?)
+    ORDER BY c.population DESC LIMIT ?`).bind(low, high, low, high, limit).all<NamedCity>();
+  return results;
+}

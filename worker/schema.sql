@@ -6,3 +6,6 @@ CREATE INDEX IF NOT EXISTS cities_name_key ON cities (name_key);
 CREATE INDEX IF NOT EXISTS cities_ascii_key ON cities (ascii_key);
 CREATE TABLE IF NOT EXISTS countries (code TEXT PRIMARY KEY, name TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sessions (name TEXT PRIMARY KEY, data TEXT NOT NULL, at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS photon_cache (key TEXT PRIMARY KEY, body TEXT NOT NULL, at REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS photon_cache_at ON photon_cache (at);
+CREATE TABLE IF NOT EXISTS slugs (key TEXT PRIMARY KEY, works INTEGER NOT NULL, checked_at REAL NOT NULL);
