@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { nameKey } from "../src/geo.ts";
 
-export const GEO_DIR = join(import.meta.dirname, "../../pipeline/src/fcommerce_search/geo");
+export const GEO_DIR = join(import.meta.dirname, "../geo");
 const ROWS_PER_INSERT = 500;
 const quote = (s: string) => `'${s.replaceAll("'", "''")}'`;
 const rows = (file: string) =>

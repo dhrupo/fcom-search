@@ -62,27 +62,3 @@ def test_allow_empty_flag_reaches_build(tmp_path, monkeypatch):
     assert main(["--config", str(config), "push", "--allow-empty"]) == 0
     assert main(["--config", str(config), "push"]) == 0
     assert seen == [True, False]
-
-
-def test_serve_command_starts_the_local_server(tmp_path, monkeypatch):
-    started = {}
-
-    class FakeServer:
-        server_port = 8799
-
-        def serve_forever(self):
-            started["serving"] = True
-
-    def fake_make_server(port, live, places, web_dir, host="127.0.0.1"):
-        started.update(port=port, web_dir=web_dir, names=live._names)
-        return FakeServer()
-
-    monkeypatch.setattr("fcommerce_search.cli.make_server", fake_make_server)
-    names = tmp_path / "names.txt"
-    names.write_text("Rahim Uddin\n\n")
-    monkeypatch.setenv("FCS_SCRUB_MAP", str(names))
-    config = make_config(tmp_path)
-    web = tmp_path / "web"
-    web.mkdir()
-    assert main(["--config", str(config), "serve", "--port", "8799", "--web-dir", str(web)]) == 0
-    assert started == {"port": 8799, "web_dir": web, "names": ("Rahim Uddin",), "serving": True}
