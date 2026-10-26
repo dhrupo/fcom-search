@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs
 
-FIXTURES = Path(__file__).parent / "fixtures" / "marketplace"
+FIXTURES = Path(__file__).parents[2] / "worker" / "test" / "fixtures"
 PAGES = {"sylhet": "slug_sylhet", "london": "bootstrap_london", "dhaka": "dhaka_slug", "paris": "slug_paris",
          "moulvibazar": "slug_moulvibazar"}
 REDIRECTS = {"moulvibazar": "https://www.facebook.com/marketplace/category/search/?query=iphone"}
