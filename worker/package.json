@@ -1,0 +1,13 @@
+{
+  "name": "fcommerce-search-worker",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "test": "node --test --test-timeout=20000 'test/**/*.test.ts'",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
+  }
+}

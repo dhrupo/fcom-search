@@ -1,0 +1,38 @@
+name = "fcomsearch"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[assets]
+directory = "../web/.output/public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[vars]
+FB_ORIGIN = "https://www.facebook.com"
+PHOTON_ORIGIN = "https://photon.komoot.io"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fcommerce-search"
+database_id = "b8ada770-bbd8-48a6-be1e-90a934ff3a88"
+
+[[ratelimits]]
+name = "SEARCH_LIMIT"
+namespace_id = "1001"
+simple = { limit = 6, period = 60 }
+
+[[ratelimits]]
+name = "MORE_LIMIT"
+namespace_id = "1002"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "PLACES_LIMIT"
+namespace_id = "1003"
+simple = { limit = 60, period = 60 }
+
+[[ratelimits]]
+name = "PHOTON_LIMIT"
+namespace_id = "1004"
+simple = { limit = 60, period = 60 }

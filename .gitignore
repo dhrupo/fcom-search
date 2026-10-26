@@ -10,3 +10,7 @@ node_modules/
 web/.wrangler/
 web/.nuxt/
 web/.output/
+test-results/
+playwright-report/
+web/dist
+worker/.wrangler/
