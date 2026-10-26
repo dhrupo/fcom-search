@@ -22,6 +22,10 @@ const searchId = ref<string | null>(null);
 const canLoadMore = ref(false);
 const basicMode = ref(false);
 const degraded = ref(false);
+const aiMatched = ref(new Set<string>());
+const aiChecked = ref(new Set<string>());
+const showOthers = ref(false);
+const cityCards = new Map<string, string[]>();
 const loadingMore = ref(false);
 const problem = ref<"" | "human" | "slow">("");
 const token = ref("");
@@ -115,6 +119,7 @@ async function search() {
   const abort = (searchAbort = new AbortController());
   cities.value = []; results.value = []; phase.value = "searching";
   searchId.value = null; canLoadMore.value = false; basicMode.value = false; degraded.value = false; problem.value = "";
+  aiMatched.value = new Set(); aiChecked.value = new Set(); showOthers.value = false; cityCards.clear();
   try {
     const res = await fetch("/api/search", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
@@ -166,6 +171,12 @@ function applySearchEvent(event: any) {
     const city = cities.value.find((c) => c.name === event.city);
     if (city) Object.assign(city, { status: event.status, found: (loadingMore.value ? city.found : 0) + event.found });
     results.value.push(...event.results);
+    cityCards.set(event.city, event.results.map((r: Listing) => r.item_id));
+  }
+  if (event.type === "ai") {
+    // The AI judged the cards of the city event just before it.
+    for (const id of cityCards.get(event.city) ?? []) aiChecked.value.add(id);
+    for (const id of event.matches) aiMatched.value.add(id);
   }
   if (event.type === "done") {
     phase.value = "done";
@@ -175,6 +186,11 @@ function applySearchEvent(event: any) {
   }
   if (event.type === "error") { phase.value = "error"; canLoadMore.value = false; }
 }
+
+const isMatch = (r: Listing) => aiMatched.value.has(r.item_id);
+const folded = computed(() => results.value.filter((r) => aiChecked.value.has(r.item_id) && !isMatch(r)));
+const visible = computed(() => [...results.value.filter(isMatch), ...results.value.filter((r) => !aiChecked.value.has(r.item_id)),
+  ...(showOthers.value ? folded.value : [])]);
 
 const summary = computed(() => {
   const n = cities.value.length;
@@ -256,11 +272,12 @@ const summary = computed(() => {
     </ul>
 
     <ul v-if="results.length" aria-label="Results" class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
-      <li v-for="r in results" :key="r.item_id" class="flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white">
+      <li v-for="r in visible" :key="r.item_id" class="flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white">
         <div class="aspect-square bg-stone-100">
           <img v-if="r.photo" :src="r.photo" alt="" loading="lazy" referrerpolicy="no-referrer" class="h-full w-full object-cover">
         </div>
         <div class="flex flex-1 flex-col gap-1 p-3">
+          <p v-if="isMatch(r)" class="w-fit rounded bg-teal-50 px-1.5 py-0.5 text-xs font-medium text-teal-800">AI match</p>
           <h3 class="text-sm font-medium leading-snug">{{ r.title }}</h3>
           <p class="text-lg font-semibold" data-testid="price">{{ r.price_text ?? "Price not given" }}</p>
           <p class="text-xs text-stone-500">
@@ -271,6 +288,12 @@ const summary = computed(() => {
         </div>
       </li>
     </ul>
+    <div v-if="folded.length && !showOthers" class="mt-6 flex justify-center">
+      <button type="button" @click="showOthers = true"
+              class="rounded-lg border border-stone-300 px-6 py-2.5 font-medium text-stone-700 hover:border-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-700/30">
+        Show {{ folded.length }} other listings
+      </button>
+    </div>
     <div v-if="canLoadMore && results.length" class="mt-6 flex justify-center">
       <button type="button" :disabled="loadingMore" @click="loadMore"
               class="rounded-lg border border-teal-700 px-6 py-2.5 font-medium text-teal-800 hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-700/30 disabled:opacity-60">

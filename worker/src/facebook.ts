@@ -3,6 +3,7 @@ export type Price = { amount: number; formatted: string | null } | "unknown";
 export interface Listing {
   item_id: string; kind: "listing"; created_at: number | null; title: string | null; price: Price;
   city: string | null; images: string[]; sold: boolean; permalink: string;
+  ai?: boolean; // the AI check's saved verdict for this pool's keyword
 }
 
 const BLOCK_CODES = new Set([1675004]);

@@ -29,6 +29,9 @@ function setup({ replay = replayFetch(), searchLimit = limiter(), secret = "test
       verified.push({ ...form, url });
       return Response.json({ success: form.secret === "test-secret" && form.response === "pass" });
     }
+    if (url.startsWith("https://openrouter.test/")) {
+      return Response.json({ choices: [{ message: { content: '{"match": [1, 2]}' } }] });
+    }
     if (url.startsWith("https://photon.test/")) {
       const q = (new URL(url).searchParams.get("q") ?? "").replaceAll(",", "").toLowerCase();
       const hit = Object.entries(TOWNS).find(([k]) => q.startsWith(k));
@@ -179,4 +182,17 @@ test("private_names_are_read_once_not_per_search", async () => {
   env.DB.prepare = (sql: string) => { sqls.push(sql); return prepare(sql); };
   for (const keyword of ["iphone", "samsung", "pixel"]) await call("POST", "/api/search", { ...SEARCH, keyword, radius_km: 40 }, ORIGIN);
   assert.equal(sqls.filter((q) => q.includes("FROM private_names")).length, 1);
+});
+
+test("openrouter_key_never_appears_in_any_response", async () => {
+  const { call, env } = setup({ replay: replayFetch() });
+  Object.assign(env, { OPENROUTER_API_KEY: "sk-or-v1-NEVER-SHOW-THIS", AI_ORIGIN: "https://openrouter.test", AI_MODEL: "m:free",
+    AI_LIMIT: { limit: async () => ({ success: true }) } });
+  const answers = [await call("POST", "/api/search", { ...SEARCH, radius_km: 40 }, ORIGIN)];
+  const id = answers[0].text.split("\n").filter(Boolean).map((l) => JSON.parse(l)).at(-1).search_id;
+  assert.ok(answers[0].text.includes('"type":"ai"'), "the AI check ran");
+  answers.push(await call("POST", "/api/more", { search_id: id }, ORIGIN), await call("GET", "/api/places?q=sylh"),
+    await call("GET", "/api/reverse?lat=24.89&lon=91.87"), await call("POST", "/api/search", { ...SEARCH, keyword: "" }, ORIGIN),
+    await call("POST", "/api/search", "{broken", ORIGIN), await call("GET", "/api/nothing"), await call("GET", "/"));
+  for (const a of answers) assert.ok(!a.text.includes("NEVER-SHOW-THIS"), `${a.status} leaks the key`);
 });
