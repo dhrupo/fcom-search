@@ -17,7 +17,8 @@ const SEARCH_FIELDS = new Set(["keyword", "lat", "lon", "radius_km", "min_price"
 const SEARCH_ID = /^[0-9a-f]{32}$/;
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const NAMES_SECONDS = 10 * 60;
-const AI_MODEL = "google/gemma-4-31b-it:free";
+// Free models come and go and get rate-limited upstream: OpenRouter tries them in this order.
+const AI_MODEL = "nvidia/nemotron-3.5-lightning:free, google/gemma-4-31b-it:free, poolside/laguna-xs-2.1:free";
 
 class BadRequest extends Error {}
 

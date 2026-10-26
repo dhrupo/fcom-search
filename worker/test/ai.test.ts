@@ -21,7 +21,7 @@ function fakeAi(content: string | (() => never), status = 200) {
   return { fetch, sent };
 }
 const config = (ai: ReturnType<typeof fakeAi>, over: Record<string, unknown> = {}) => ({ key: "sk-or-test", origin: "https://openrouter.test",
-  model: "test/model:free", fetch: ai.fetch, db: fakeD1(), limiter: allowAll, now: () => 1_792_924_206, ...over });
+  model: "test/model:free, test/backup:free", fetch: ai.fetch, db: fakeD1(), limiter: allowAll, now: () => 1_792_924_206, ...over });
 
 test("sends_scrubbed_titles_only", async () => {
   const ai = fakeAi('{"match": [1]}');
@@ -29,10 +29,19 @@ test("sends_scrubbed_titles_only", async () => {
   const [{ url, headers, body }] = ai.sent;
   assert.equal(url, "https://openrouter.test/api/v1/chat/completions");
   assert.equal(headers.authorization, "Bearer sk-or-test");
-  assert.equal(body.model, "test/model:free");
+  assert.deepEqual(body.models, ["test/model:free", "test/backup:free"], "OpenRouter falls back through the list");
+  assert.equal(body.model, undefined);
+  assert.equal(body.reasoning?.enabled, false, "thinking models would spend the answer's tokens on reasoning");
+  assert.ok(body.max_tokens >= 800);
   const prompt = JSON.stringify(body.messages);
   assert.ok(prompt.includes("iPhone 13 silicone case") && prompt.includes("BDT55,000") && prompt.includes("iphone 13"));
   for (const leak of ["Sylhet", "Rahim", "111", "222"]) assert.ok(!prompt.includes(leak), `prompt carries ${leak}`);
+});
+
+test("sends_at_most_three_models", async () => {
+  const ai = fakeAi('{"match": [1]}');
+  await matchingIds(config(ai, { model: "a:free, b:free, c:free, d:free" }), "iphone 13", CARDS);
+  assert.deepEqual(ai.sent[0].body.models, ["a:free", "b:free", "c:free"], "OpenRouter refuses more than 3");
 });
 
 test("reads_matching_numbers_from_messy_json", async () => {
