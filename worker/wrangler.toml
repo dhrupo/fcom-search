@@ -12,11 +12,10 @@ run_worker_first = ["/api/*"]
 FB_ORIGIN = "https://www.facebook.com"
 PHOTON_ORIGIN = "https://photon.komoot.io"
 
-# database_id is set by `wrangler d1 create` at deploy (W10); local dev keys on it only.
 [[d1_databases]]
 binding = "DB"
 database_name = "fcommerce-search"
-database_id = "local-only"
+database_id = "b8ada770-bbd8-48a6-be1e-90a934ff3a88"
 
 [[ratelimits]]
 name = "SEARCH_LIMIT"
