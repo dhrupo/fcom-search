@@ -1,3 +1,4 @@
+import { matchingIds } from "./ai.ts";
 import type { DB } from "./geo.ts";
 import { LiveSearch, type Event } from "./live.ts";
 import type { Fetch } from "./marketplace.ts";
@@ -7,6 +8,7 @@ export interface Env {
   DB: DB; ASSETS: { fetch(request: Request): Promise<Response> };
   SEARCH_LIMIT: Limiter; MORE_LIMIT: Limiter; PLACES_LIMIT: Limiter; PHOTON_LIMIT: Limiter;
   FB_ORIGIN: string; PHOTON_ORIGIN: string; TURNSTILE_SECRET?: string; TURNSTILE_VERIFY_URL?: string;
+  OPENROUTER_API_KEY?: string; AI_ORIGIN?: string; AI_MODEL?: string; AI_LIMIT?: Limiter;
 }
 
 const MAX_BODY = 10_000;
@@ -15,6 +17,7 @@ const SEARCH_FIELDS = new Set(["keyword", "lat", "lon", "radius_km", "min_price"
 const SEARCH_ID = /^[0-9a-f]{32}$/;
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 const NAMES_SECONDS = 10 * 60;
+const AI_MODEL = "google/gemma-4-31b-it:free";
 
 class BadRequest extends Error {}
 
@@ -115,7 +118,10 @@ export function makeHandler({ fetch = globalThis.fetch.bind(globalThis) as Fetch
     if (origin !== null && origin !== url.origin) return json(403, { error: "forbidden" });
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
     const places = new Places(env.DB, fetch, env.PHOTON_ORIGIN, now, env.PHOTON_LIMIT);
-    const live = () => new LiveSearch(env.DB, fetch, env.FB_ORIGIN, places, now, () => privateNames(env.DB));
+    const ai = { key: env.OPENROUTER_API_KEY, origin: env.AI_ORIGIN ?? "https://openrouter.ai", model: env.AI_MODEL ?? AI_MODEL,
+      fetch, db: env.DB, limiter: env.AI_LIMIT ?? { limit: async () => ({ success: false }) }, now };
+    const live = () => new LiveSearch(env.DB, fetch, env.FB_ORIGIN, places, now, () => privateNames(env.DB),
+      (keyword, cards) => matchingIds(ai, keyword, cards));
     const slowDown = async (limiter: Limiter) => !(await limiter.limit({ key: ip })).success;
 
     if (request.method === "GET" && (url.pathname === "/api/places" || url.pathname === "/api/reverse")) {

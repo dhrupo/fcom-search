@@ -54,6 +54,12 @@ test("empty_verdict_folds_nothing", async () => {
 test("timeout_or_error_means_not_checked", async () => {
   assert.equal(await matchingIds(config(fakeAi('{"match": [1]}', 429)), "iphone 13", CARDS), null);
   assert.equal(await matchingIds(config(fakeAi(() => { throw new DOMException("timed out", "TimeoutError"); })), "iphone 13", CARDS), null);
+  // Answers late; only the timeout's abort makes this "not checked". (The timer also keeps Node's event loop alive.)
+  const silent = { fetch: (_url: string, init: RequestInit = {}) => new Promise<Response>((resolve, reject) => {
+    const alive = setTimeout(() => resolve(Response.json({ choices: [{ message: { content: '{"match": [1]}' } }] })), 2000);
+    init.signal?.addEventListener("abort", () => { clearTimeout(alive); reject(init.signal!.reason); });
+  }), sent: [] };
+  assert.equal(await matchingIds(config(silent as any, { timeoutMs: 50 }), "iphone 13", CARDS), null, "a silent AI is cut off");
   const notJson = { fetch: async () => new Response("<html>bad gateway</html>", { status: 200 }), sent: [] };
   assert.equal(await matchingIds(config(notJson as any), "iphone 13", CARDS), null);
 });

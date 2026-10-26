@@ -24,9 +24,11 @@ function photon() {
   return { fetch, asked };
 }
 
-function setup({ replay = replayFetch(), db = fakeD1({ geo: true }), now = () => NOW, names = [] as string[], towns = photon() } = {}) {
+type Ai = (keyword: string, cards: { item_id: string; title: string; price_text: string | null }[]) => Promise<string[] | null>;
+function setup({ replay = replayFetch(), db = fakeD1({ geo: true }), now = () => NOW, names = [] as string[], towns = photon(),
+  ai = undefined as Ai | undefined } = {}) {
   const places = new Places(db, towns.fetch, "https://photon.komoot.io", now, allowAll);
-  const live = new LiveSearch(db, replay.fetch, ORIGIN, places, now, async () => names);
+  const live = new LiveSearch(db, replay.fetch, ORIGIN, places, now, async () => names, ai);
   return { live, replay, db, towns, places };
 }
 const collect = async (events: AsyncIterable<Event>) => { const out: Event[] = []; for await (const e of events) out.push(e); return out; };
@@ -461,4 +463,38 @@ test("basic_mode_explains_when_d1_writes_are_blocked", async () => {
   const db = fakeD1({ geo: true, failWrites: true });
   const events: any[] = await collect(basic({ db }).live.run("iphone", ...SYLHET, 10));
   assert.deepEqual(events.at(-1), { type: "error", error: "search is busy right now; please try again later" });
+});
+
+/** Stand-in for the AI check: "matches" the first `n` cards it is shown and counts its calls. */
+const firstCards = (n: number) => { const calls: string[][] = [];
+  const ai: Ai = async (_k, cards) => { calls.push(cards.map((c) => c.item_id)); return cards.slice(0, n).map((c) => c.item_id); };
+  return { ai, calls }; };
+
+test("ai_event_comes_after_city_and_before_done", async () => {
+  const { ai, calls } = firstCards(3);
+  const events: any[] = await collect(setup({ ai }).live.run("iphone", ...SYLHET, 40));
+  assert.deepEqual(events.map((e) => e.type), ["start", "city", "ai", "done"]);
+  assert.deepEqual(events[2].matches, events[1].results.slice(0, 3).map((r: any) => r.item_id));
+  assert.deepEqual([events[2].city, events[2].checked], [events[1].city, events[1].results.length]);
+  assert.equal(calls.length, 1);
+  const basicEvents: any[] = await basicSearch(basic({ ai }).live, "iphone", ...SYLHET, 10);
+  assert.deepEqual(basicEvents.map((e) => e.type), ["mode", "start", "city", "ai", "done"]);
+});
+
+test("verdict_is_cached_in_the_pool", async () => {
+  const { ai, calls } = firstCards(2), db = fakeD1({ geo: true });
+  const first: any[] = await collect(setup({ ai, db }).live.run("iphone", ...SYLHET, 40));
+  const again: any[] = await collect(setup({ ai, db }).live.run("iphone", ...SYLHET, 40));
+  assert.equal(calls.length, 1, "the second search reads the saved verdict");
+  assert.deepEqual(again.find((e) => e.type === "ai").matches, first.find((e) => e.type === "ai").matches);
+  assert.ok(!JSON.stringify(again.find((e) => e.type === "city").results).includes('"ai"'), "cards do not carry the verdict field");
+});
+
+test("no_key_no_ai_event", async () => {
+  assert.deepEqual((await collect(setup().live.run("iphone", ...SYLHET, 40))).map((e) => e.type), ["start", "city", "done"]);
+  const unsure: Ai = async () => null;
+  assert.deepEqual((await collect(setup({ ai: unsure }).live.run("iphone", ...SYLHET, 40))).map((e) => e.type), ["start", "city", "done"]);
+  const { ai, calls } = firstCards(1);
+  await collect(setup({ ai }).live.run("bicycle", ...SYLHET, 40));
+  assert.equal(calls.length, 0, "no results, nothing to check");
 });

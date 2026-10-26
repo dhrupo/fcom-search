@@ -2,7 +2,9 @@ import type { DB } from "./geo.ts";
 import type { Fetch } from "./marketplace.ts";
 import type { Limiter } from "./places.ts";
 
-export interface AiConfig { key?: string; origin: string; model: string; fetch: Fetch; db: DB; limiter: Limiter; now: () => number }
+export interface AiConfig {
+  key?: string; origin: string; model: string; fetch: Fetch; db: DB; limiter: Limiter; now: () => number; timeoutMs?: number;
+}
 interface Listed { item_id: string; title: string; price_text: string | null }
 
 // OpenRouter's free tier allows 50 free-model requests a day; keep a margin.
@@ -45,7 +47,7 @@ export async function matchingIds(config: AiConfig, keyword: string, cards: List
   let content: string;
   try {
     const response = await config.fetch(`${config.origin}/api/v1/chat/completions`, {
-      method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS),
+      method: "POST", signal: AbortSignal.timeout(config.timeoutMs ?? TIMEOUT_MS),
       headers: { authorization: `Bearer ${config.key}`, "content-type": "application/json" },
       body: JSON.stringify({ model: config.model, temperature: 0, max_tokens: 300, messages: [
         { role: "system", content: SYSTEM }, { role: "user", content: `Search: ${keyword}\nListings:\n${listing}` }] }),

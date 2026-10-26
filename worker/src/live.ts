@@ -13,7 +13,9 @@ export type Event =
   | { type: "start"; cities: string[]; mode: "point" | "basic"; search_id: string | null }
   | { type: "city"; city: string; status: string; found: number; results: Card[] }
   | { type: "done"; total: number; search_id: string | null; can_load_more: boolean; degraded?: boolean }
+  | { type: "ai"; city: string; matches: string[]; checked: number }
   | { type: "error"; error: string };
+export type AiCheck = (keyword: string, cards: Card[]) => Promise<string[] | null>;
 type Band = [number | null, number | null];
 interface Area { lat: number; lon: number; radius_km: number; min_price: number | null; max_price: number | null; days: number | null }
 interface PointState { kind: "point"; keyword: string; key: string; wanted: Area; area: string; bands: Band[]; more_left: number; shown: string[] }
@@ -108,10 +110,12 @@ const canMore = (state: PointState) => state.bands.length > 0 && state.more_left
 /** Search Marketplace live, logged out, around a point (or the big cities near it), and keep a pool in D1. */
 export class LiveSearch {
   private db: DB; private fetch: Fetch; private origin: string; private places: Places; private now: () => number;
-  private loadNames: () => Promise<string[]>; private names?: Promise<string[]>;
+  private loadNames: () => Promise<string[]>; private names?: Promise<string[]>; private ai?: AiCheck;
 
-  constructor(db: DB, fetch: Fetch, origin: string, places: Places, now: () => number, loadNames: () => Promise<string[]>) {
+  constructor(db: DB, fetch: Fetch, origin: string, places: Places, now: () => number, loadNames: () => Promise<string[]>,
+              ai?: AiCheck) {
     this.db = db; this.fetch = fetch; this.origin = origin; this.places = places; this.now = now; this.loadNames = loadNames;
+    this.ai = ai;
   }
 
   private point() { return new PointSearch(this.db, this.fetch, this.origin, this.now); }
@@ -151,6 +155,7 @@ export class LiveSearch {
     const id = await this.remember(state);
     yield { type: "start", cities: [name], mode: "point", search_id: id };
     yield { type: "city", city: name, status: "ok", found: matches.length, results: matches };
+    yield* this.aiVerdict(key, keyword, name, matches, items);
     yield id ? { type: "done", total: matches.length, search_id: id, can_load_more: canMore(state) }
       : { type: "done", total: matches.length, search_id: null, can_load_more: false, degraded: true };
   }
@@ -202,9 +207,27 @@ export class LiveSearch {
     const after = await this.update(searchId, (s) => (s.kind === "basic"
       ? { ...s, shown: [...s.shown, ...matches.map((r) => r.item_id)], total: s.total + matches.length } : null));
     yield { type: "city", city: city.name, status, found: matches.length, results: matches };
+    yield* this.aiVerdict(key, state.keyword, city.name, matches, items);
     if (after?.kind === "basic" && !after.pending.length) {
       yield { type: "done", total: after.total, search_id: searchId, can_load_more: false };
     }
+  }
+
+  /** Which shown cards the AI judges a real match: the pool's saved verdict, or one AI call whose answer is saved. */
+  private async *aiVerdict(key: string, keyword: string, city: string, cards: Card[], items: Listing[]): AsyncGenerator<Event> {
+    if (!this.ai) return;
+    const saved = new Map(items.map((i) => [i.item_id, i.ai]));
+    let matches: string[] | null;
+    if (cards.every((c) => saved.get(c.item_id) !== undefined)) {
+      matches = cards.filter((c) => saved.get(c.item_id)).map((c) => c.item_id);
+    } else {
+      matches = await this.ai(keyword, cards);
+      if (!matches) return;
+      const hit = new Set(matches), checked = new Set(cards.map((c) => c.item_id));
+      const judged = (await this.pooled(key)).map((i) => (checked.has(i.item_id) ? { ...i, ai: hit.has(i.item_id) } : i));
+      await this.db.prepare("UPDATE pools SET data = ? WHERE pool_key = ?").bind(JSON.stringify(judged), key).run().catch(() => undefined);
+    }
+    yield { type: "ai", city, matches, checked: cards.length };
   }
 
   private async fetchCity(city: City, place: string, key: string, keyword: string, pooled: Listing[]): Promise<[string, Listing[]]> {
