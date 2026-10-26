@@ -25,29 +25,66 @@ const SEARCH_SECONDS = 30 * 60;
 const POOL_SECONDS = 60 * 86400;
 const MAX_MORE = 5;
 const MAX_TOWN_LOOKUPS = 8;
+const POOL_MAX = 200;
 const EXPIRED = { type: "error", error: "this search has expired; search again" } as const;
 const NOT_LISTED = { type: "error", error: "this city is not part of the search" } as const;
 const CITY_STATUS: Record<string, string> = { ok: "ok", nothing_new: "ok", blocked: "blocked" };
-// Python's \w and \d are Unicode-aware; these match the pipeline's scrubbing, Bengali digits included.
-const WORD = "[\\p{L}\\p{N}_]";
-const PHONE = new RegExp(`(?<![\\p{L}\\p{N}_+])(?:\\+\\p{Nd}[\\p{Nd}\\s-]{8,}\\p{Nd}|\\p{Nd}(?:[-.]?\\p{Nd}){9,})(?!${WORD})`, "gu");
-const HANDLE = new RegExp(`@${WORD}[\\p{L}\\p{N}_.]*`, "gu");
-const nameRules = new Map<string, RegExp>();
+// Explicit script ranges, not Unicode property classes: those cost 4-10 ms CPU to compile in a cold isolate (Free: 10 ms).
+// Latin, Greek, Cyrillic, Arabic, Devanagari (without the danda) and Bengali letters, marks and digits.
+const LETTERS = "A-Za-z0-9_\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF\\u0600-\\u06FF\\u0900-\\u0963\\u0966-\\u097F\\u0980-\\u09FF";
+const DIGIT = "[0-9\\u0966-\\u096F\\u09E6-\\u09EF]";
+const WORD = `[${LETTERS}]`;
+const PHONE = new RegExp(`(?<![${LETTERS}+])(?:\\+${DIGIT}(?:${DIGIT}|[\\s-]){8,}${DIGIT}|${DIGIT}(?:[-.]?${DIGIT}){9,})(?!${WORD})`, "g");
+// Bangladeshi mobiles as sellers write them: 01712 345678, 017 1234 5678, (017) 1234-5678, +880..., Bengali digits.
+const BD_MOBILE = new RegExp(`(?<!${DIGIT})\\(?(?:\\+?[8৮]{2}[\\s-]?)?[0০]?[1১][3-9৩-৯]`
+  + `(?:${DIGIT}{2}[\\s.-]?${DIGIT}{6}|[\\s.)-]{0,2}${DIGIT}{4}[\\s.-]?${DIGIT}{4})(?!${DIGIT})`, "g");
+const HANDLE = new RegExp(`@${WORD}[${LETTERS}.]*`, "g");
+const TOKEN = new RegExp(`${WORD}+`, "g");
+const WORD_EDGES = new RegExp(`^${WORD}(?:.*${WORD})?$`, "s");
+interface NameIndex { key: string; words: Set<string>; firsts: Set<string>; maxWords: number; rest: RegExp | null }
+let nameIndex: NameIndex | undefined;
+
+/** Names as a word-sequence set (a 529-name regex costs ~20 ms CPU on a cold isolate); odd-edged names keep a regex. */
+function indexNames(names: string[]): NameIndex {
+  const key = names.join("\n");
+  if (nameIndex?.key === key) return nameIndex;
+  const plain = names.filter((n) => WORD_EDGES.test(n.trim())), odd = names.filter((n) => !WORD_EDGES.test(n.trim()));
+  const escaped = odd.sort((a, b) => b.length - a.length).map((n) => n.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const lowered = plain.map((n) => n.trim().toLowerCase());
+  nameIndex = { key, words: new Set(lowered), firsts: new Set(lowered.map((n) => n.match(TOKEN)?.[0] ?? n)),
+    maxWords: Math.max(1, ...plain.map((n) => n.match(TOKEN)?.length ?? 1)),
+    rest: escaped.length ? new RegExp(`(?<![${LETTERS}.])(?:${escaped.join("|")})(?!${WORD})`, "gi") : null };
+  return nameIndex;
+}
+
+function hideNames(text: string, names: string[]): string {
+  const { words, firsts, maxWords, rest } = indexNames(names);
+  // Lowercasing can change a string's length (e.g. "İ"); then fall back to per-slice lowercasing.
+  const lower = text.toLowerCase(), same = lower.length === text.length;
+  const tokens = [...text.matchAll(TOKEN)].map((m) => [m.index!, m.index! + m[0].length]);
+  let out = "", from = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const start = tokens[i][0];
+    if (text[start - 1] === ".") continue;
+    const piece = (end: number) => (same ? lower.slice(start, end) : text.slice(start, end).toLowerCase());
+    if (!firsts.has(piece(tokens[i][1]))) continue;
+    for (let j = Math.min(tokens.length - 1, i + maxWords - 1); j >= i; j--) {
+      if (words.has(piece(tokens[j][1]))) {
+        out += text.slice(from, start) + "•••";
+        from = tokens[j][1];
+        i = j;
+        break;
+      }
+    }
+  }
+  out += text.slice(from);
+  return rest ? out.replace(rest, "•••") : out;
+}
 
 /** Remove phone numbers, @handles and known private names from seller text. */
 export function scrub(text: string | null | undefined, names: string[] = []): string {
-  let out = (text ?? "").replace(PHONE, "•••").replace(HANDLE, "•••");
-  if (names.length) {
-    const cacheKey = names.join("\n");
-    let rule = nameRules.get(cacheKey);
-    if (!rule) {
-      const escaped = [...names].sort((a, b) => b.length - a.length).map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      rule = new RegExp(`(?<![\\p{L}\\p{N}_.])(?:${escaped.join("|")})(?!${WORD})`, "giu");
-      nameRules.clear();
-      nameRules.set(cacheKey, rule);
-    }
-    out = out.replace(rule, "•••");
-  }
+  let out = (text ?? "").replace(PHONE, "•••").replace(BD_MOBILE, "•••").replace(HANDLE, "•••");
+  if (names.length) out = hideNames(out, names);
   return out.split(/\s+/).filter(Boolean).join(" ");
 }
 
@@ -85,7 +122,7 @@ export class LiveSearch {
     await this.prune();
     const key = `pt:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm},${area.min_price},${area.max_price},${keyword.toLowerCase()}`;
     const band: Band = [area.min_price, area.max_price];
-    let status = "ok", full = (await this.poolSize(key)) >= PAGE_SIZE;
+    let status = "ok", full = (await this.pooled(key)).length >= PAGE_SIZE;
     if (!(await this.fresh(key, keyword))) {
       const found = await this.point().search(keyword, lat, lon, radiusKm, band);
       ({ status, full } = found);
@@ -136,7 +173,7 @@ export class LiveSearch {
       .filter((r) => fresh.has(r.item_id) && !state.shown.includes(r.item_id));
     const after = await this.update(searchId, (s) => {
       if (s.kind !== "point") return null;
-      if (found.status !== "ok") return { ...s, bands: [band!, ...s.bands], more_left: s.more_left + 1 };
+      if (found.status !== "ok") return { ...s, bands: [band!, ...s.bands] };
       return { ...s, shown: [...s.shown, ...matches.map((r) => r.item_id)],
         bands: [...s.bands, ...(found.full ? split(band!, found.listings.map(amount)) : [])] };
     });
@@ -154,9 +191,9 @@ export class LiveSearch {
     });
     if (claimed === undefined) return void (yield EXPIRED);
     if (!claimed || !city) return void (yield NOT_LISTED);
-    const state = claimed as BasicState, place = slug(city.name);
-    const status = (await this.fresh(place, state.keyword)) ? "ok" : await this.fetchCity(city, place, state.keyword);
-    const matches = (await this.pool(place, state.keyword, state.wanted)).filter((r) => !state.shown.includes(r.item_id));
+    const state = claimed as BasicState, place = slug(city.name), key = `${place}|${state.keyword.toLowerCase()}`;
+    const status = (await this.fresh(key, state.keyword)) ? "ok" : await this.fetchCity(city, place, key, state.keyword);
+    const matches = (await this.pool(key, state.keyword, state.wanted)).filter((r) => !state.shown.includes(r.item_id));
     const after = await this.update(searchId, (s) => (s.kind === "basic"
       ? { ...s, shown: [...s.shown, ...matches.map((r) => r.item_id)], total: s.total + matches.length } : null));
     yield { type: "city", city: city.name, status, found: matches.length, results: matches };
@@ -165,7 +202,7 @@ export class LiveSearch {
     }
   }
 
-  private async fetchCity(city: City, place: string, keyword: string): Promise<string> {
+  private async fetchCity(city: City, place: string, key: string, keyword: string): Promise<string> {
     let response: Response, text: string;
     try {
       response = await this.fetch(`${this.origin}/marketplace/${place}/search?query=${encodeURIComponent(keyword)}`,
@@ -174,15 +211,16 @@ export class LiveSearch {
     } catch {
       return "failed";
     }
+    // A login wall also moves us off the city's address: it is a block, not a missing address.
+    const outcome = classify(response.status, response.url, text);
+    if (outcome !== "ok") return CITY_STATUS[outcome] ?? "failed";
     if (!new URL(response.url || this.origin).pathname.startsWith(`/marketplace/${place}/`)) {
       await this.places.rememberSlug(city.name, city.country, false);
       return "no_address";
     }
-    const outcome = classify(response.status, response.url, text);
-    if (outcome !== "ok") return CITY_STATUS[outcome] ?? "failed";
     const [parsed, listings] = parseSearch(text);
     await this.places.rememberSlug(city.name, city.country, true);
-    await this.save(place, keyword, listings);
+    await this.save(key, keyword, listings);
     return CITY_STATUS[parsed] ?? "failed";
   }
 
@@ -216,7 +254,7 @@ export class LiveSearch {
     const now = this.now();
     await this.db.batch([
       this.db.prepare("DELETE FROM searches WHERE at <= ?").bind(now - SEARCH_SECONDS),
-      this.db.prepare("DELETE FROM listings WHERE fetched_at <= ?").bind(now - POOL_SECONDS),
+      this.db.prepare("DELETE FROM pools WHERE fetched_at <= ?").bind(now - POOL_SECONDS),
       this.db.prepare("DELETE FROM fetches WHERE at <= ?").bind(now - FRESH_SECONDS),
     ]);
   }
@@ -226,16 +264,19 @@ export class LiveSearch {
     return Boolean(row) && this.now() - row!.at < FRESH_SECONDS;
   }
 
-  private async poolSize(key: string): Promise<number> {
-    return (await this.db.prepare("SELECT count(*) AS n FROM listings WHERE pool_key = ?").bind(key).first<{ n: number }>())?.n ?? 0;
+  private async pooled(key: string): Promise<Listing[]> {
+    const row = await this.db.prepare("SELECT data FROM pools WHERE pool_key = ?").bind(key).first<{ data: string }>();
+    return row ? JSON.parse(row.data) : [];
   }
 
+  /** One D1 row per pool (Free plan: 100k rows written a day); newest listings first, at most POOL_MAX. */
   private async save(key: string, keyword: string, listings: Listing[], markFresh = true): Promise<void> {
-    const now = this.now();
-    const writes = listings.map((item) => this.db.prepare("INSERT OR REPLACE INTO listings (item_id, pool_key, data, fetched_at) VALUES (?, ?, ?, ?)")
-      .bind(item.item_id, key, JSON.stringify(item), now));
+    const now = this.now(), ids = new Set(listings.map((l) => l.item_id));
+    const merged = [...listings, ...(await this.pooled(key)).filter((l) => !ids.has(l.item_id))].slice(0, POOL_MAX);
+    const writes = [this.db.prepare("INSERT OR REPLACE INTO pools (pool_key, data, fetched_at) VALUES (?, ?, ?)")
+      .bind(key, JSON.stringify(merged), now)];
     if (markFresh) writes.push(this.db.prepare("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)").bind(`${key}|${keyword.toLowerCase()}`, now));
-    if (writes.length) await this.db.batch(writes);
+    await this.db.batch(writes);
   }
 
   /** Each listing town's point on the map: the same-named place nearest the search (our list, then OpenStreetMap). */
@@ -258,11 +299,9 @@ export class LiveSearch {
 
   private async pool(key: string, keyword: string, area: Area, matchWords = true): Promise<Card[]> {
     // Facebook already matched point-search results to the keyword, sometimes without the exact words.
-    const words = matchWords ? keyword.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [] : [];
-    const { results } = await this.db.prepare("SELECT data FROM listings WHERE pool_key = ? ORDER BY fetched_at DESC").bind(key)
-      .all<{ data: string }>();
+    const words = matchWords ? keyword.toLowerCase().match(TOKEN) ?? [] : [];
     const { min_price: min, max_price: max, days } = area;
-    const kept = results.map((r) => JSON.parse(r.data) as Listing).filter((item) => {
+    const kept = (await this.pooled(key)).filter((item) => {
       const title = (item.title ?? "").toLowerCase(), price = amount(item);
       if (words.some((w) => !title.includes(w))) return false;
       if ((min !== null || max !== null) && price === null) return false;

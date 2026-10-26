@@ -210,7 +210,7 @@ test("expired_searches_and_old_listings_are_pruned", async () => {
   now.t += 61 * 86400;
   await collect(live.run("phone case", ...SYLHET, 40));
   const searches = await db.prepare("SELECT count(*) AS n FROM searches").first<{ n: number }>();
-  const old = await db.prepare("SELECT count(*) AS n FROM listings WHERE fetched_at < ?").bind(now.t - 60 * 86400).first<{ n: number }>();
+  const old = await db.prepare("SELECT count(*) AS n FROM pools WHERE fetched_at < ?").bind(now.t - 60 * 86400).first<{ n: number }>();
   assert.deepEqual([searches?.n, old?.n], [1, 0]);
 });
 
@@ -274,7 +274,7 @@ test("failed_load_more_keeps_its_band", async () => {
   const failed: any[] = await collect(setup({ replay: replayFetch({ graphqlStatus: 429 }), db }).live.more(id));
   assert.equal(failed[0].status, "blocked");
   const after = await state();
-  assert.deepEqual([after.bands, after.more_left], [before.bands, 5]);
+  assert.deepEqual([after.bands, after.more_left], [before.bands, 4], "the band is kept; the attempt is used up");
 });
 
 test("two_load_more_at_once_never_crash", async () => {
@@ -354,5 +354,97 @@ test("full_page_of_one_price_offers_no_more", async () => {
 test("scrub_respects_name_edges_and_longest_names", () => {
   assert.equal(scrub("Bali trip", ["Ali"]), "Bali trip");
   assert.equal(scrub("Rahim Uddin here", ["Rahim", "Rahim Uddin"]), "••• here");
+  assert.equal(scrub("write to mail.ali today", ["Ali"]), "write to mail.ali today");
+  assert.equal(scrub("İstanbul trip with Ali", ["Ali"]), "İstanbul trip with •••");
+  assert.equal(scrub("call Md. Karim now", ["Md.", "Karim"]), "call ••• ••• now");
   assert.equal(scrub("কল +৮৮০ ১৭১১ ২২৩৩৪৪ এখনই"), "কল ••• এখনই");
+});
+
+test("login_redirect_is_blocked_not_a_missing_address", async () => {
+  const replay = { ...replayFetch({ graphqlStatus: 500 }) }, real = replay.fetch;
+  replay.fetch = async (url: string, init?: RequestInit) => {
+    const answer = await real(url, init);
+    if (!url.includes("/marketplace/sylhet/")) return answer;
+    const login = new Response(await answer.text(), { status: 200 });
+    Object.defineProperty(login, "url", { value: "https://www.facebook.com/login/?next=%2Fmarketplace%2Fsylhet%2F" });
+    return login;
+  };
+  const { live, places } = basic({ replay: replay as any });
+  const events = await basicSearch(live, "iphone", ...SYLHET, 10);
+  assert.deepEqual(events.filter((e: any) => e.type === "city").map((e: any) => [e.city, e.status]), [["Sylhet", "blocked"]]);
+  assert.equal(await places.slugStatus("Sylhet", "BD"), null, "a login wall says nothing about the address");
+});
+
+test("failed_load_more_uses_up_an_attempt", async () => {
+  const db = fakeD1({ geo: true });
+  const id = (await collect(setup({ db }).live.run("iphone", ...SYLHET, 40))).at(-1)!.search_id as string;
+  const blocked = replayFetch({ graphqlStatus: 429 }), live = setup({ replay: blocked, db }).live;
+  const dones: any[] = [];
+  for (let i = 0; i < 7; i++) dones.push((await collect(live.more(id))).at(-1));
+  assert.ok(blocked.posts().length <= 5, `${blocked.posts().length} Facebook calls while blocked`);
+  assert.equal(dones.at(-1).can_load_more, false);
+});
+
+test("scrub_catches_bangladeshi_mobile_formats", () => {
+  for (const [text, want] of [["call 01712 345678", "call •••"], ["017 1234 5678", "•••"], ["(017) 1234-5678", "•••"],
+    ["Call01712345678", "Call•••"], ["01712345678tk", "•••tk"], ["০১৭১২ ৩৪৫৬৭৮", "•••"], ["+880 1712 345678", "•••"],
+    ["8801712345678", "•••"], ["ফোন ০১৭১২৩৪৫৬৭৮", "ফোন •••"]]) {
+    assert.equal(scrub(text), want, text);
+  }
+  for (const kept of ["Price 15000 18000 20000", "Corolla 2015 2016 2017", "iPhone 13 Pro 256GB", "Size 40 41 42 43",
+    "17000 18000 19000 taka", "Model 1712 2023"]) {
+    assert.equal(scrub(kept), kept);
+  }
+});
+
+test("cold_scrub_with_the_full_name_list_fits_the_cpu_budget", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const script = `
+    import { scrub } from ${JSON.stringify(new URL("../src/live.ts", import.meta.url).href)};
+    const names = Array.from({ length: 529 }, (_, i) => i % 2 ? "Rahim Uddin" + i : "রহিম" + i + " উদ্দিন");
+    const titles = Array.from({ length: 24 }, (_, i) => "iPhone 13 Pro Max 256GB call 01712 345678 used " + i + " months রহিম");
+    // Main-thread time: process.cpuUsage also counts V8's background compiler threads.
+    const a = performance.now(); for (const t of titles) scrub(t, names); console.log(performance.now() - a);`;
+  const runs = [1, 2, 3].map(() => Number(execFileSync(process.execPath, ["--input-type=module", "-e", script],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim()));
+  assert.ok(Math.min(...runs) < 5, `cold scrub of 24 titles took ${runs.join(", ")} ms`);
+});
+
+test("one_pool_row_per_search", async () => {
+  const { live, db } = setup();
+  await collect(live.run("iphone", ...SYLHET, 40));
+  assert.equal((await db.prepare("SELECT count(*) AS n FROM pools").first<{ n: number }>())?.n, 1);
+  assert.equal(await db.prepare("SELECT name FROM sqlite_master WHERE name = 'listings'").first(), null);
+});
+
+test("city_pools_are_kept_per_keyword", async () => {
+  const { live, db, replay } = basic();
+  await basicSearch(live, "iphone", ...SYLHET, 10);
+  await basicSearch(live, "iphone 13", ...SYLHET, 10);
+  const keys = (await db.prepare("SELECT pool_key FROM pools ORDER BY pool_key").all<{ pool_key: string }>()).results.map((r) => r.pool_key);
+  assert.deepEqual(keys, ["sylhet|iphone", "sylhet|iphone 13"]);
+  assert.equal(replay.gets().filter((g) => g.url.includes("/marketplace/sylhet/")).length, 2);
+});
+
+test("pool_keeps_the_newest_200_listings", async () => {
+  const now = Object.assign(() => now.t, { t: NOW });
+  const base = replayFetch({ graphqlStatus: 500 });
+  let round = 0;
+  const fresh = { ...base, fetch: async (url: string, init?: RequestInit) => {
+    const answer = await base.fetch(url, init);
+    if (!url.includes("/marketplace/sylhet/")) return answer;
+    round++;
+    const page = new Response((await answer.text()).replace(/"id": ?"(\d+)"/g, (_, id) => `"id": "${round}${id}"`), { status: 200 });
+    Object.defineProperty(page, "url", { value: answer.url });
+    return page;
+  } };
+  const { live, db } = basic({ replay: fresh as any, now });
+  for (let i = 0; i < 10; i++) {
+    await basicSearch(live, "iphone", ...SYLHET, 100);
+    now.t += 11 * 60;
+  }
+  const row = await db.prepare("SELECT data FROM pools WHERE pool_key = 'sylhet|iphone'").first<{ data: string }>();
+  const kept = JSON.parse(row!.data);
+  assert.equal(kept.length, 200);
+  assert.ok(kept[0].item_id.startsWith("10"), "the newest fetch comes first");
 });

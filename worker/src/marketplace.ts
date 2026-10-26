@@ -10,9 +10,12 @@ export const PAGE_SIZE = 24;
 const FACEBOOK = "https://www.facebook.com";
 const BOOTSTRAP_PATH = "/marketplace/london/search?query=phone";
 const FRIENDLY = "CometMarketplaceSearchContentContainerQuery";
-const PRELOADED = /ContentContainerQueryRelayPreloader[^"]*","queryID":"(\d+)","variables":/;
-const LSD = /"LSD",\[\],\{"token":"([^"]+)"/;
+const PRELOADED = /ContentContainerQueryRelayPreloader[^"]*","queryID":"(\d+)","variables":/g;
+const LSD = /"LSD",\[\],\{"token":"([^"]+)"/g;
 const SESSION_SECONDS = 30 * 60;
+const FAILURE_SECONDS = 5 * 60;
+const BOOTSTRAP_MAX = 300_000;
+const OVERLAP = 300;
 const NO_UPPER_BOUND = 214748364700;
 const FEED = ["marketplace_search", "feed_units"];
 const CHROME = {
@@ -38,14 +41,15 @@ function objectAt(text: string, start: number): Record<string, any> | undefined 
   return undefined;
 }
 
-function sessionIn(text: string, cookie: string): Session | null | undefined {
-  const found = PRELOADED.exec(text), lsd = LSD.exec(text);
-  if (!found || !lsd) return undefined;
-  const template = objectAt(text, found.index + found[0].length);
-  if (!template) return undefined;
+/** The first match at or after `from` (a global regex keeps its place in `lastIndex`). */
+function matchFrom(pattern: RegExp, text: string, from: number): RegExpExecArray | null {
+  pattern.lastIndex = Math.max(0, from);
+  return pattern.exec(text);
+}
+
+function usable(template: Record<string, any>): boolean {
   const params = template.params ?? {};
-  const usable = [params.browse_request_params, params.bqf].every((p) => typeof p === "object" && p && !Array.isArray(p));
-  return usable ? { docId: found[1], lsd: lsd[1], template, cookie } : null;
+  return [params.browse_request_params, params.bqf].every((p) => typeof p === "object" && p && !Array.isArray(p));
 }
 
 /** Marketplace search at a point, radius and price band, logged out, through the page's own request. */
@@ -57,6 +61,14 @@ export class PointSearch {
   }
 
   private async bootstrap(): Promise<Session | null> {
+    const session = await this.readTokens();
+    // A failed bootstrap is remembered briefly, so a changed page does not cost a full read on every search.
+    await this.db.prepare("INSERT OR REPLACE INTO sessions (name, data, at) VALUES ('marketplace', ?, ?)")
+      .bind(JSON.stringify(session), this.now()).run();
+    return session;
+  }
+
+  private async readTokens(): Promise<Session | null> {
     let response: Response;
     try {
       response = await this.fetch(this.origin + BOOTSTRAP_PATH, { headers: NAVIGATION_HEADERS });
@@ -67,18 +79,18 @@ export class PointSearch {
     const cookie = response.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
     // Only the page's first ~250 KB holds the tokens: stop reading there (CPU budget, W0 spike).
     const reader = response.body.getReader(), decoder = new TextDecoder();
-    let text = "";
+    let text = "", scanned = 0, found: RegExpExecArray | null = null, lsd: RegExpExecArray | null = null;
     try {
       for (;;) {
         const { value, done } = await reader.read();
         text += decoder.decode(value, { stream: !done });
-        const session = sessionIn(text, cookie);
-        if (session !== undefined || done) {
+        found ??= matchFrom(PRELOADED, text, scanned - OVERLAP);
+        lsd ??= matchFrom(LSD, text, scanned - OVERLAP);
+        scanned = text.length;
+        const template = found && lsd ? objectAt(text, found.index + found[0].length) : undefined;
+        if (template || done || text.length > BOOTSTRAP_MAX) {
           if (!done) await reader.cancel();
-          if (!session) return null;
-          await this.db.prepare("INSERT OR REPLACE INTO sessions (name, data, at) VALUES ('marketplace', ?, ?)")
-            .bind(JSON.stringify(session), this.now()).run();
-          return session;
+          return template && usable(template) ? { docId: found![1], lsd: lsd![1], template, cookie } : null;
         }
       }
     } catch {
@@ -88,7 +100,8 @@ export class PointSearch {
 
   private async session(): Promise<Session | null> {
     const row = await this.db.prepare("SELECT data, at FROM sessions WHERE name = 'marketplace'").first<{ data: string; at: number }>();
-    if (row && this.now() - row.at <= SESSION_SECONDS) return JSON.parse(row.data);
+    const saved = row ? JSON.parse(row.data) as Session | null : undefined;
+    if (row && this.now() - row.at <= (saved ? SESSION_SECONDS : FAILURE_SECONDS)) return saved!;
     return this.bootstrap();
   }
 

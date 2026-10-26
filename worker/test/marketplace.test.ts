@@ -121,3 +121,34 @@ test("template_without_query_slot_is_unavailable", async () => {
 test("no_listings_is_an_ok_empty_answer", async () => {
   assert.deepEqual(await pointSearch().search("bicycle", ...SYLHET, 40), { status: "ok", listings: [], full: false });
 });
+
+test("bootstrap_gives_up_after_300_kb_and_waits_before_retrying", async () => {
+  let pulled = 0, gets = 0;
+  const page = () => new ReadableStream({ pull(c) {
+    if (pulled++ >= 64) return c.close();
+    c.enqueue(new TextEncoder().encode("<script>" + "x".repeat(16 * 1024 - 17) + "</script>"));
+  } });
+  const fetch = async (url: string, init: RequestInit = {}) => {
+    if (init.method === "POST") return replayFetch().fetch(url, init);
+    gets++;
+    pulled = 0;
+    return new Response(page(), { status: 200 });
+  };
+  const now = clock(), ps = new PointSearch(fakeD1(), fetch, ORIGIN, now);
+  assert.equal((await ps.search("phone", ...SYLHET, 40)).status, "unavailable");
+  assert.ok(pulled <= 20, `read ${pulled} chunks of 16 KB`);
+  assert.equal((await ps.search("phone", ...SYLHET, 40)).status, "unavailable");
+  assert.equal(gets, 1, "a failed bootstrap is not retried at once");
+  now.now += 6 * 60;
+  await ps.search("phone", ...SYLHET, 40);
+  assert.equal(gets, 2);
+});
+
+test("tokens_split_across_chunks_are_found", async () => {
+  const page = new TextEncoder().encode(fixture("bootstrap_london.html"));
+  let at = 0;
+  const body = new ReadableStream({ pull(c) { if (at >= page.length) return c.close(); c.enqueue(page.subarray(at, at += 100)); } });
+  const fetch = async (url: string, init: RequestInit = {}) =>
+    init.method === "POST" ? replayFetch().fetch(url, init) : new Response(body, { status: 200 });
+  assert.equal((await new PointSearch(fakeD1(), fetch, ORIGIN, clock()).search("phone", ...SYLHET, 40)).status, "ok");
+});
