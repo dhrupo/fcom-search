@@ -21,6 +21,7 @@ const locating = ref(false);
 const searchId = ref<string | null>(null);
 const canLoadMore = ref(false);
 const basicMode = ref(false);
+const degraded = ref(false);
 const loadingMore = ref(false);
 const problem = ref<"" | "human" | "slow">("");
 const token = ref("");
@@ -113,7 +114,7 @@ async function search() {
   searchAbort?.abort();
   const abort = (searchAbort = new AbortController());
   cities.value = []; results.value = []; phase.value = "searching";
-  searchId.value = null; canLoadMore.value = false; basicMode.value = false; problem.value = "";
+  searchId.value = null; canLoadMore.value = false; basicMode.value = false; degraded.value = false; problem.value = "";
   try {
     const res = await fetch("/api/search", {
       method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
@@ -170,6 +171,7 @@ function applySearchEvent(event: any) {
     phase.value = "done";
     searchId.value = event.search_id ?? searchId.value;
     canLoadMore.value = Boolean(event.can_load_more);
+    degraded.value = Boolean(event.degraded);
   }
   if (event.type === "error") { phase.value = "error"; canLoadMore.value = false; }
 }
@@ -246,6 +248,7 @@ const summary = computed(() => {
       Facebook's map search is not answering right now, so this is basic mode: we searched the big cities nearby by name.
     </p>
     <p role="status" class="mt-6 text-sm text-stone-600">{{ summary }}</p>
+    <p v-if="degraded" class="mt-2 text-sm text-stone-600">Results are not being saved right now, so Load more is off.</p>
     <ul v-if="cities.length" aria-label="Cities" class="mt-2 flex flex-wrap gap-2 text-sm">
       <li v-for="c in cities" :key="c.name" class="rounded-full border border-stone-200 bg-white px-3 py-1">
         <span class="font-medium">{{ c.name }}</span>: {{ CITY_STATUS[c.status]?.(c.found) ?? c.status }}

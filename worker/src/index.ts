@@ -14,6 +14,7 @@ const DAYS = new Set([3, 7, 15, 30, 45, 60]);
 const SEARCH_FIELDS = new Set(["keyword", "lat", "lon", "radius_km", "min_price", "max_price", "days", "turnstile"]);
 const SEARCH_ID = /^[0-9a-f]{32}$/;
 const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const NAMES_SECONDS = 10 * 60;
 
 class BadRequest extends Error {}
 
@@ -99,14 +100,22 @@ export function makeHandler({ fetch = globalThis.fetch.bind(globalThis) as Fetch
     }
   }
 
+  let names: { at: number; list: string[] } | undefined;
+  /** The private name list, kept in memory for a while: reading 529 rows per search costs CPU and the read quota. */
+  async function privateNames(db: DB): Promise<string[]> {
+    if (!names || now() - names.at > NAMES_SECONDS) {
+      names = { at: now(), list: (await db.prepare("SELECT name FROM private_names").all<{ name: string }>()).results.map((r) => r.name) };
+    }
+    return names.list;
+  }
+
   async function api(request: Request, env: Env, url: URL): Promise<Response> {
     // A page on another site can make the visitor's browser call us; only our own pages may.
     const origin = request.headers.get("origin");
     if (origin !== null && origin !== url.origin) return json(403, { error: "forbidden" });
     const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
     const places = new Places(env.DB, fetch, env.PHOTON_ORIGIN, now, env.PHOTON_LIMIT);
-    const live = () => new LiveSearch(env.DB, fetch, env.FB_ORIGIN, places, now, async () =>
-      (await env.DB.prepare("SELECT name FROM private_names").all<{ name: string }>()).results.map((r) => r.name));
+    const live = () => new LiveSearch(env.DB, fetch, env.FB_ORIGIN, places, now, () => privateNames(env.DB));
     const slowDown = async (limiter: Limiter) => !(await limiter.limit({ key: ip })).success;
 
     if (request.method === "GET" && (url.pathname === "/api/places" || url.pathname === "/api/reverse")) {

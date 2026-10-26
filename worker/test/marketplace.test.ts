@@ -152,3 +152,8 @@ test("tokens_split_across_chunks_are_found", async () => {
     init.method === "POST" ? replayFetch().fetch(url, init) : new Response(body, { status: 200 });
   assert.equal((await new PointSearch(fakeD1(), fetch, ORIGIN, clock()).search("phone", ...SYLHET, 40)).status, "ok");
 });
+
+test("point_search_works_when_the_session_cannot_be_saved", async () => {
+  const replay = replayFetch(), ps = new PointSearch(fakeD1({ failWrites: true }), replay.fetch, ORIGIN, clock());
+  assert.equal((await ps.search("iphone", ...SYLHET, 40)).status, "ok");
+});
