@@ -35,7 +35,7 @@ function graphqlAnswer(low: number, high: number): string {
 
 /** A fetch that answers Marketplace URLs from the saved, reduced logged-out pages; nothing reaches Facebook. */
 export function replayFetch({ status = {} as Record<string, number>, graphqlStatus = 200, graphqlBody = undefined as string | undefined,
-  bootstrapHtml = undefined as string | undefined } = {}) {
+  bootstrapHtml = undefined as string | undefined, pages = {} as Record<string, string> } = {}) {
   const sent: Sent[] = [];
   const fetch = async (input: string, init: RequestInit = {}) => {
     const headers = Object.fromEntries(new Headers(init.headers).entries());
@@ -53,8 +53,9 @@ export function replayFetch({ status = {} as Record<string, number>, graphqlStat
     }
     const slug = new URL(input).pathname.match(/^\/marketplace\/([^/]+)\/search/)?.[1] ?? "";
     if (slug in status) return respond("", status[slug], input);
-    if (!(slug in PAGES)) return respond("", 404, input);
-    const html = slug === "london" && bootstrapHtml !== undefined ? bootstrapHtml : fixture(`${PAGES[slug]}.html`);
+    const page = pages[slug] ?? PAGES[slug];
+    if (!page) return respond("", 404, input);
+    const html = slug === "london" && bootstrapHtml !== undefined ? bootstrapHtml : fixture(`${page}.html`);
     const cookies: [string, string][] = slug === "london"
       ? [["set-cookie", "datr=test-browser-id; Path=/; Secure"], ["set-cookie", "fr=test-fr; Path=/"]] : [];
     return respond(html, 200, REDIRECTS[slug] ?? input, cookies);

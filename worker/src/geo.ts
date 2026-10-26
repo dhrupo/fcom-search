@@ -59,3 +59,16 @@ export async function citiesByPrefix(db: DB, prefix: string, limit = 4): Promise
     ORDER BY c.population DESC LIMIT ?`).bind(low, high, low, high, limit).all<NamedCity>();
   return results;
 }
+
+/** Bundled cities for each name (by name or ASCII name), in one query. */
+export async function townsNamed(db: DB, names: string[]): Promise<Map<string, City[]>> {
+  const keys = [...new Set(names.map(nameKey))].slice(0, 40), found = new Map<string, City[]>();
+  if (!keys.length) return found;
+  const marks = keys.map(() => "?").join(",");
+  const { results } = await db.prepare(`SELECT name_key, ascii_key, ${COLUMNS} FROM cities
+    WHERE name_key IN (${marks}) OR ascii_key IN (${marks})`).bind(...keys, ...keys).all<City & { name_key: string; ascii_key: string }>();
+  for (const { name_key, ascii_key, ...city } of results) {
+    for (const key of new Set([name_key, ascii_key])) if (keys.includes(key)) found.set(key, [...(found.get(key) ?? []), city]);
+  }
+  return found;
+}

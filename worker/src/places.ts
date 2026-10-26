@@ -10,6 +10,7 @@ const ENOUGH_BUNDLED = 4;
 const FALLBACK_KM = 150;
 const CACHE_SECONDS = 30 * 86400;
 
+const normalized = (text: string) => text.split(/\s+/).filter(Boolean).join(" ").toLowerCase().slice(0, 100);
 export const slug = (name: string) => name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/g, "");
 
 function features(body: any): Suggestion[] {
@@ -54,12 +55,11 @@ export class Places {
 
   /** Cities and towns for a typed name, the most populous first (villages are left out). */
   async suggest(query: string): Promise<Suggestion[]> {
-    const q = query.split(/\s+/).filter(Boolean).join(" ").toLowerCase().slice(0, 100);
+    const q = normalized(query);
     if (q.length < 2) return [];
     const bundled = (await citiesByPrefix(this.db, q)).map((c) => ({ name: c.name, country: c.country_name, countrycode: c.country,
       state: null, lat: c.lat, lon: c.lon, population: c.population }));
-    const found = bundled.length >= ENOUGH_BUNDLED ? [] : features(await this.photon("/api/",
-      [["q", q], ["limit", String(MAX_SUGGESTIONS)], ["lang", "en"], ["osm_tag", "place:city"], ["osm_tag", "place:town"]]));
+    const found = bundled.length >= ENOUGH_BUNDLED ? [] : await this.photonPlaces(q);
     const ranked = await Promise.all(found.map(async (f) =>
       ({ ...f, population: (await findTown(this.db, f.name, f.countrycode?.toUpperCase() || undefined))?.population ?? 0 })));
     const merged = new Map<string, Suggestion>();
@@ -68,6 +68,17 @@ export class Places {
       if (!merged.has(key)) merged.set(key, s);
     }
     return [...merged.values()].slice(0, MAX_SUGGESTIONS);
+  }
+
+  private async photonPlaces(q: string): Promise<Suggestion[]> {
+    return features(await this.photon("/api/",
+      [["q", q], ["limit", String(MAX_SUGGESTIONS)], ["lang", "en"], ["osm_tag", "place:city"], ["osm_tag", "place:town"]]));
+  }
+
+  /** Map points for a town name OpenStreetMap knows (shares the type-ahead cache). */
+  async locate(town: string): Promise<[number, number][]> {
+    const q = normalized(town);
+    return q.length < 2 ? [] : (await this.photonPlaces(q)).map((p) => [p.lat, p.lon]);
   }
 
   async reverse(lat: number, lon: number): Promise<Suggestion | null> {

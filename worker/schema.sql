@@ -9,3 +9,11 @@ CREATE TABLE IF NOT EXISTS sessions (name TEXT PRIMARY KEY, data TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS photon_cache (key TEXT PRIMARY KEY, body TEXT NOT NULL, at REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS photon_cache_at ON photon_cache (at);
 CREATE TABLE IF NOT EXISTS slugs (key TEXT PRIMARY KEY, works INTEGER NOT NULL, checked_at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS listings (
+  item_id TEXT NOT NULL, pool_key TEXT NOT NULL, data TEXT NOT NULL, fetched_at REAL NOT NULL, PRIMARY KEY (item_id, pool_key));
+CREATE INDEX IF NOT EXISTS listings_pool ON listings (pool_key, fetched_at);
+CREATE INDEX IF NOT EXISTS listings_age ON listings (fetched_at);
+CREATE TABLE IF NOT EXISTS fetches (key TEXT PRIMARY KEY, at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS searches (id TEXT PRIMARY KEY, state TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 0, at REAL NOT NULL);
+CREATE INDEX IF NOT EXISTS searches_at ON searches (at);
+CREATE TABLE IF NOT EXISTS private_names (name TEXT PRIMARY KEY);

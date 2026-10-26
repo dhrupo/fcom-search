@@ -9,17 +9,29 @@ let geoCache: string | undefined;
 /** The slice of the D1 API the Worker uses, on node:sqlite, with the real schema (and the real city list). */
 export function fakeD1({ geo = false } = {}) {
   const db = new DatabaseSync(":memory:");
+  const counter = { queries: 0 };
   db.exec(SCHEMA);
   if (geo) db.exec(`BEGIN; ${(geoCache ??= geoSql().join("\n"))} COMMIT;`);
   const statement = (sql: string, params: unknown[] = []) => ({
     bind: (...values: unknown[]) => statement(sql, values),
-    all: async () => ({ results: db.prepare(sql).all(...(params as any[])) }),
-    first: async () => db.prepare(sql).get(...(params as any[])) ?? null,
-    run: async () => ({ success: true, meta: { changes: Number(db.prepare(sql).run(...(params as any[])).changes) } }),
+    all: async () => { counter.queries++; return { results: db.prepare(sql).all(...(params as any[])) }; },
+    first: async () => { counter.queries++; return db.prepare(sql).get(...(params as any[])) ?? null; },
+    run: async () => { counter.queries++; return { success: true, meta: { changes: Number(db.prepare(sql).run(...(params as any[])).changes) } }; },
+    write: () => ({ results: [], meta: { changes: Number(db.prepare(sql).run(...(params as any[])).changes) } }),
   });
   return {
     prepare: (sql: string) => statement(sql),
-    batch: async (statements: ReturnType<typeof statement>[]) => Promise.all(statements.map((s) => s.all())),
+    // Like D1: one batch counts as one query and runs as one transaction.
+    batch: async (statements: ReturnType<typeof statement>[]) => {
+      counter.queries++;
+      db.exec("BEGIN");
+      try {
+        const out = statements.map((s) => s.write());
+        db.exec("COMMIT");
+        return out;
+      } catch (e) { db.exec("ROLLBACK"); throw e; }
+    },
+    counter,
     exec: async (sql: string) => { db.exec(sql); return { count: 1 }; },
   };
 }
