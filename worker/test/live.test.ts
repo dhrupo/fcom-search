@@ -448,3 +448,17 @@ test("pool_keeps_the_newest_200_listings", async () => {
   assert.equal(kept.length, 200);
   assert.ok(kept[0].item_id.startsWith("10"), "the newest fetch comes first");
 });
+
+test("search_still_answers_when_d1_writes_are_blocked", async () => {
+  const db = fakeD1({ geo: true, failWrites: true });
+  const events: any[] = await collect(setup({ db }).live.run("iphone", ...SYLHET, 40));
+  assert.deepEqual(events.map((e) => e.type), ["start", "city", "done"]);
+  assert.ok(events[1].results.length > 0, "Facebook results are still shown");
+  assert.deepEqual([events.at(-1).can_load_more, events.at(-1).degraded], [false, true]);
+});
+
+test("basic_mode_explains_when_d1_writes_are_blocked", async () => {
+  const db = fakeD1({ geo: true, failWrites: true });
+  const events: any[] = await collect(basic({ db }).live.run("iphone", ...SYLHET, 10));
+  assert.deepEqual(events.at(-1), { type: "error", error: "search is busy right now; please try again later" });
+});

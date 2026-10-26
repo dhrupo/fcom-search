@@ -223,3 +223,19 @@ test("foreign_origin_post_refused", async ({ page }) => {
   const own = await page.request.post("/api/search", { data: body, headers: { origin: "http://127.0.0.1:8797" } });
   expect(own.status()).toBe(200);
 });
+
+test("results_still_show_when_saving_is_off", async ({ page }) => {
+  const card = { item_id: "1", title: "iPhone 13", price: 50000, price_text: "BDT50,000", town: "Sylhet", created_at: null,
+    photo: null, permalink: "https://www.facebook.com/marketplace/item/1/", sold: false, distance_km: 1 };
+  await page.route("**/api/search", (route) => route.fulfill({ status: 200, contentType: "application/x-ndjson",
+    body: [{ type: "start", cities: ["Sylhet"], mode: "point", search_id: null },
+           { type: "city", city: "Sylhet", status: "ok", found: 1, results: [card] },
+           { type: "done", total: 1, search_id: null, can_load_more: false, degraded: true }].map((e) => JSON.stringify(e)).join("\n") + "\n" }));
+  await page.goto("/");
+  await page.getByLabel("What are you looking for?").fill("iphone");
+  await pickPlace(page, "sylh", /Sylhet/);
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("list", { name: "Results" }).getByRole("listitem")).toHaveCount(1);
+  await expect(page.getByText("Results are not being saved right now, so Load more is off.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+});

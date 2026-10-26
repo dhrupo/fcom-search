@@ -64,7 +64,7 @@ export class PointSearch {
     const session = await this.readTokens();
     // A failed bootstrap is remembered briefly, so a changed page does not cost a full read on every search.
     await this.db.prepare("INSERT OR REPLACE INTO sessions (name, data, at) VALUES ('marketplace', ?, ?)")
-      .bind(JSON.stringify(session), this.now()).run();
+      .bind(JSON.stringify(session), this.now()).run().catch(() => undefined);
     return session;
   }
 

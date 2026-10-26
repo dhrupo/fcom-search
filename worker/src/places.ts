@@ -49,7 +49,7 @@ export class Places {
     await this.db.batch([
       this.db.prepare("INSERT OR REPLACE INTO photon_cache (key, body, at) VALUES (?, ?, ?)").bind(key, JSON.stringify(body), now),
       this.db.prepare("DELETE FROM photon_cache WHERE at <= ?").bind(now - CACHE_SECONDS),
-    ]);
+    ]).catch(() => undefined);
     return body;
   }
 
@@ -93,7 +93,7 @@ export class Places {
 
   async rememberSlug(name: string, country: string, works: boolean): Promise<void> {
     await this.db.prepare("INSERT OR REPLACE INTO slugs (key, works, checked_at) VALUES (?, ?, ?)")
-      .bind(`${name}|${country}`, works ? 1 : 0, this.now()).run();
+      .bind(`${name}|${country}`, works ? 1 : 0, this.now()).run().catch(() => undefined);
   }
 
   /** Big cities inside the radius whose address is not known to fail; else the nearest big city. */

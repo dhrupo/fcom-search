@@ -10,9 +10,9 @@ export interface Card {
 }
 export type Event =
   | { type: "mode"; mode: "basic" }
-  | { type: "start"; cities: string[]; mode: "point" | "basic"; search_id: string }
+  | { type: "start"; cities: string[]; mode: "point" | "basic"; search_id: string | null }
   | { type: "city"; city: string; status: string; found: number; results: Card[] }
-  | { type: "done"; total: number; search_id: string; can_load_more: boolean }
+  | { type: "done"; total: number; search_id: string | null; can_load_more: boolean; degraded?: boolean }
   | { type: "error"; error: string };
 type Band = [number | null, number | null];
 interface Area { lat: number; lon: number; radius_km: number; min_price: number | null; max_price: number | null; days: number | null }
@@ -28,6 +28,7 @@ const MAX_TOWN_LOOKUPS = 8;
 const POOL_MAX = 200;
 const EXPIRED = { type: "error", error: "this search has expired; search again" } as const;
 const NOT_LISTED = { type: "error", error: "this city is not part of the search" } as const;
+const BUSY = { type: "error", error: "search is busy right now; please try again later" } as const;
 const CITY_STATUS: Record<string, string> = { ok: "ok", nothing_new: "ok", blocked: "blocked" };
 // Explicit script ranges, not Unicode property classes: those cost 4-10 ms CPU to compile in a cold isolate (Free: 10 ms).
 // Latin, Greek, Cyrillic, Arabic, Devanagari (without the danda) and Bengali letters, marks and digits.
@@ -122,33 +123,36 @@ export class LiveSearch {
     await this.prune();
     const key = `pt:${lat.toFixed(3)},${lon.toFixed(3)},${radiusKm},${area.min_price},${area.max_price},${keyword.toLowerCase()}`;
     const band: Band = [area.min_price, area.max_price];
-    let status = "ok", full = (await this.pooled(key)).length >= PAGE_SIZE;
+    let items = await this.pooled(key), status = "ok", full = items.length >= PAGE_SIZE;
     if (!(await this.fresh(key, keyword))) {
       const found = await this.point().search(keyword, lat, lon, radiusKm, band);
       ({ status, full } = found);
-      if (status === "ok") await this.save(key, keyword, found.listings);
+      if (status === "ok") items = await this.save(key, keyword, found.listings, items);
     }
     if (status === "ok") {
-      yield* this.pointEvents(key, keyword, area, band, full);
+      yield* this.pointEvents(key, keyword, area, band, full, items);
       return;
     }
     yield { type: "mode", mode: "basic" };
     const cities = await this.places.citiesToSearch(lat, lon, radiusKm);
     const id = await this.remember({ kind: "basic", keyword, wanted: area, pending: cities, shown: [], total: 0 });
+    // Basic mode needs the saved search to answer one city per request.
+    if (!id) return void (yield BUSY);
     yield { type: "start", cities: cities.map((c) => c.name), mode: "basic", search_id: id };
     if (!cities.length) yield { type: "done", total: 0, search_id: id, can_load_more: false };
   }
 
-  private async *pointEvents(key: string, keyword: string, area: Area, band: Band, full: boolean): AsyncGenerator<Event> {
+  private async *pointEvents(key: string, keyword: string, area: Area, band: Band, full: boolean, items: Listing[]): AsyncGenerator<Event> {
     const near = await bigCitiesNear(this.db, area.lat, area.lon, area.radius_km, 1);
     const name = near[0]?.name ?? "this area";
-    const matches = await this.pool(key, keyword, area, false);
+    const matches = await this.cards(items, keyword, area, false);
     const state: PointState = { kind: "point", keyword, key, wanted: area, area: name, more_left: MAX_MORE,
       bands: full ? split(band, matches.map((r) => r.price)) : [], shown: matches.map((r) => r.item_id) };
     const id = await this.remember(state);
     yield { type: "start", cities: [name], mode: "point", search_id: id };
     yield { type: "city", city: name, status: "ok", found: matches.length, results: matches };
-    yield { type: "done", total: matches.length, search_id: id, can_load_more: canMore(state) };
+    yield id ? { type: "done", total: matches.length, search_id: id, can_load_more: canMore(state) }
+      : { type: "done", total: matches.length, search_id: null, can_load_more: false, degraded: true };
   }
 
   /** The next price band of an earlier point search: up to MAX_MORE times, never repeating a listing. */
@@ -167,9 +171,9 @@ export class LiveSearch {
     }
     const state = claimed as PointState, { wanted } = state;
     const found = await this.point().search(state.keyword, wanted.lat, wanted.lon, wanted.radius_km, band);
-    if (found.status === "ok") await this.save(state.key, state.keyword, found.listings, false);
+    const items = found.status === "ok" ? await this.save(state.key, state.keyword, found.listings, await this.pooled(state.key), false) : [];
     const fresh = new Set(found.listings.map((l) => l.item_id));
-    const matches = (await this.pool(state.key, state.keyword, wanted, false))
+    const matches = (await this.cards(items, state.keyword, wanted, false))
       .filter((r) => fresh.has(r.item_id) && !state.shown.includes(r.item_id));
     const after = await this.update(searchId, (s) => {
       if (s.kind !== "point") return null;
@@ -192,8 +196,9 @@ export class LiveSearch {
     if (claimed === undefined) return void (yield EXPIRED);
     if (!claimed || !city) return void (yield NOT_LISTED);
     const state = claimed as BasicState, place = slug(city.name), key = `${place}|${state.keyword.toLowerCase()}`;
-    const status = (await this.fresh(key, state.keyword)) ? "ok" : await this.fetchCity(city, place, key, state.keyword);
-    const matches = (await this.pool(key, state.keyword, state.wanted)).filter((r) => !state.shown.includes(r.item_id));
+    let items = await this.pooled(key), status = "ok";
+    if (!(await this.fresh(key, state.keyword))) [status, items] = await this.fetchCity(city, place, key, state.keyword, items);
+    const matches = (await this.cards(items, state.keyword, state.wanted)).filter((r) => !state.shown.includes(r.item_id));
     const after = await this.update(searchId, (s) => (s.kind === "basic"
       ? { ...s, shown: [...s.shown, ...matches.map((r) => r.item_id)], total: s.total + matches.length } : null));
     yield { type: "city", city: city.name, status, found: matches.length, results: matches };
@@ -202,32 +207,36 @@ export class LiveSearch {
     }
   }
 
-  private async fetchCity(city: City, place: string, key: string, keyword: string): Promise<string> {
+  private async fetchCity(city: City, place: string, key: string, keyword: string, pooled: Listing[]): Promise<[string, Listing[]]> {
     let response: Response, text: string;
     try {
       response = await this.fetch(`${this.origin}/marketplace/${place}/search?query=${encodeURIComponent(keyword)}`,
         { headers: NAVIGATION_HEADERS });
       text = await response.text();
     } catch {
-      return "failed";
+      return ["failed", pooled];
     }
     // A login wall also moves us off the city's address: it is a block, not a missing address.
     const outcome = classify(response.status, response.url, text);
-    if (outcome !== "ok") return CITY_STATUS[outcome] ?? "failed";
+    if (outcome !== "ok") return [CITY_STATUS[outcome] ?? "failed", pooled];
     if (!new URL(response.url || this.origin).pathname.startsWith(`/marketplace/${place}/`)) {
       await this.places.rememberSlug(city.name, city.country, false);
-      return "no_address";
+      return ["no_address", pooled];
     }
     const [parsed, listings] = parseSearch(text);
     await this.places.rememberSlug(city.name, city.country, true);
-    await this.save(key, keyword, listings);
-    return CITY_STATUS[parsed] ?? "failed";
+    return [CITY_STATUS[parsed] ?? "failed", await this.save(key, keyword, listings, pooled)];
   }
 
-  private async remember(state: State): Promise<string> {
+  /** The new search's id, or null when D1 refuses writes (e.g. the Free daily quota is used up). */
+  private async remember(state: State): Promise<string | null> {
     const id = crypto.randomUUID().replaceAll("-", "");
-    await this.db.prepare("INSERT INTO searches (id, state, version, at) VALUES (?, ?, 0, ?)").bind(id, JSON.stringify(state), this.now()).run();
-    return id;
+    try {
+      await this.db.prepare("INSERT INTO searches (id, state, version, at) VALUES (?, ?, 0, ?)").bind(id, JSON.stringify(state), this.now()).run();
+      return id;
+    } catch {
+      return null;
+    }
   }
 
   private async read(id: string): Promise<{ state: State; version: number } | null> {
@@ -243,8 +252,13 @@ export class LiveSearch {
       if (!current) return undefined;
       const next = change(current.state);
       if (!next) return null;
-      const [result] = await this.db.batch([this.db.prepare("UPDATE searches SET state = ?, version = version + 1 WHERE id = ? AND version = ?")
-        .bind(JSON.stringify(next), id, current.version)]) as { meta: { changes: number } }[];
+      let result: { meta: { changes: number } };
+      try {
+        [result] = await this.db.batch([this.db.prepare("UPDATE searches SET state = ?, version = version + 1 WHERE id = ? AND version = ?")
+          .bind(JSON.stringify(next), id, current.version)]) as { meta: { changes: number } }[];
+      } catch {
+        return null;
+      }
       if (result.meta.changes === 1) return next;
     }
     return null;
@@ -256,7 +270,7 @@ export class LiveSearch {
       this.db.prepare("DELETE FROM searches WHERE at <= ?").bind(now - SEARCH_SECONDS),
       this.db.prepare("DELETE FROM pools WHERE fetched_at <= ?").bind(now - POOL_SECONDS),
       this.db.prepare("DELETE FROM fetches WHERE at <= ?").bind(now - FRESH_SECONDS),
-    ]);
+    ]).catch(() => undefined);
   }
 
   private async fresh(key: string, keyword: string): Promise<boolean> {
@@ -269,14 +283,15 @@ export class LiveSearch {
     return row ? JSON.parse(row.data) : [];
   }
 
-  /** One D1 row per pool (Free plan: 100k rows written a day); newest listings first, at most POOL_MAX. */
-  private async save(key: string, keyword: string, listings: Listing[], markFresh = true): Promise<void> {
+  /** One D1 row per pool (Free plan: 100k rows written a day); newest first, at most POOL_MAX. Returns the pool even if the write fails. */
+  private async save(key: string, keyword: string, listings: Listing[], pooled: Listing[], markFresh = true): Promise<Listing[]> {
     const now = this.now(), ids = new Set(listings.map((l) => l.item_id));
-    const merged = [...listings, ...(await this.pooled(key)).filter((l) => !ids.has(l.item_id))].slice(0, POOL_MAX);
+    const merged = [...listings, ...pooled.filter((l) => !ids.has(l.item_id))].slice(0, POOL_MAX);
     const writes = [this.db.prepare("INSERT OR REPLACE INTO pools (pool_key, data, fetched_at) VALUES (?, ?, ?)")
       .bind(key, JSON.stringify(merged), now)];
     if (markFresh) writes.push(this.db.prepare("INSERT OR REPLACE INTO fetches (key, at) VALUES (?, ?)").bind(`${key}|${keyword.toLowerCase()}`, now));
-    await this.db.batch(writes);
+    await this.db.batch(writes).catch(() => undefined);
+    return merged;
   }
 
   /** Each listing town's point on the map: the same-named place nearest the search (our list, then OpenStreetMap). */
@@ -297,11 +312,11 @@ export class LiveSearch {
     return out;
   }
 
-  private async pool(key: string, keyword: string, area: Area, matchWords = true): Promise<Card[]> {
+  private async cards(items: Listing[], keyword: string, area: Area, matchWords = true): Promise<Card[]> {
     // Facebook already matched point-search results to the keyword, sometimes without the exact words.
     const words = matchWords ? keyword.toLowerCase().match(TOKEN) ?? [] : [];
     const { min_price: min, max_price: max, days } = area;
-    const kept = (await this.pooled(key)).filter((item) => {
+    const kept = items.filter((item) => {
       const title = (item.title ?? "").toLowerCase(), price = amount(item);
       if (words.some((w) => !title.includes(w))) return false;
       if ((min !== null || max !== null) && price === null) return false;

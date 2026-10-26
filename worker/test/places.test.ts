@@ -129,3 +129,9 @@ test("old_photon_cache_rows_are_pruned", async () => {
   const rows = await store.prepare("SELECT key FROM photon_cache").all<{ key: string }>();
   assert.deepEqual(rows.results.map((r) => new URL("https://x" + r.key).searchParams.get("q")), ["sreem"]);
 });
+
+test("suggestions_work_when_the_cache_cannot_be_written", async () => {
+  const photon = fakePhoton(), p = places(photon, allowAll, clock(), fakeD1({ geo: true, failWrites: true }));
+  assert.deepEqual((await p.suggest("sreem")).map((s) => s.name), ["Sreemangal"]);
+  await p.rememberSlug("Sylhet", "BD", false);
+});

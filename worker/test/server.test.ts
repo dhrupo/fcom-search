@@ -172,3 +172,11 @@ test("turnstile_check_goes_to_the_configured_verify_url", async () => {
   await call("POST", "/api/search", SEARCH, ORIGIN);
   assert.equal(verified.at(-1)?.url, "https://challenges.cloudflare.com/e2e-replay/siteverify");
 });
+
+test("private_names_are_read_once_not_per_search", async () => {
+  const { call, env } = setup();
+  const sqls: string[] = [], prepare = env.DB.prepare.bind(env.DB);
+  env.DB.prepare = (sql: string) => { sqls.push(sql); return prepare(sql); };
+  for (const keyword of ["iphone", "samsung", "pixel"]) await call("POST", "/api/search", { ...SEARCH, keyword, radius_km: 40 }, ORIGIN);
+  assert.equal(sqls.filter((q) => q.includes("FROM private_names")).length, 1);
+});
